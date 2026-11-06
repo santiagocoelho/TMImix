@@ -1,0 +1,84 @@
+function tests=test_estimation
+tests=functiontests(localfunctions);
+end
+
+function setupOnce(t)
+root=fileparts(fileparts(mfilename('fullpath')));
+t.applyFixture(matlab.unittest.fixtures.PathFixture(root));
+t.applyFixture(matlab.unittest.fixtures.PathFixture(fullfile(root,'examples')));
+end
+
+function testFixedAndBoundedSimplex(t)
+m=TMImix([1 20 5;2 40 8],["stick","ecs","dot","water"]);
+s=m.defaults(); s.fStick=[.1 .4]; s.fECS=.33; s.fDot=[.12 .45]; s.fWater=[.07 .3];
+s.Dstick=[1 3]; P=m.fitPlan(s);
+for a=[0 .2 .7 1]
+    for b=[0 .5 1]
+        p=P.decode([a b .7]); F=[p.fStick p.fECS p.fDot p.fWater];
+        verifyEqual(t,sum(F),1,'AbsTol',1e-14); verifyEqual(t,p.fECS,.33);
+        verifyGreaterThanOrEqual(t,F,[.1 .33 .12 .07]-1e-14);
+        verifyLessThanOrEqual(t,F,[.4 .33 .45 .3]+1e-14);
+        q=P.decode(P.encode(p)); verifyEqual(t,cell2mat(struct2cell(q)),cell2mat(struct2cell(p)),'AbsTol',1e-14);
+    end
+end
+end
+
+function testNoiselessNLLS(t)
+m=TMImix([.5 20 5;1.5 20 5;3 50 5;6 50 5],["stick","ecs"]);
+p=m.defaults(); p.fStick=.42; p.fECS=.58; p.p2=.65;
+s=p; s.fStick=[.1 .9]; s.fECS=[.1 .9]; s.p2=[.1 .9];
+init=p; init.fStick=.65; init.fECS=.35; init.p2=.4;
+[h,info]=m.fitNLLS(m.invariants(p),s,init);
+verifyGreaterThan(t,info.exitflag,0); verifyEqual(t,[h.fStick h.p2],[p.fStick p.p2],'AbsTol',1e-6);
+verifyEqual(t,h.DePar,p.DePar);
+end
+
+function testThreeConstraintModes(t)
+c=noise_config(); c.nTissue=3; c.nRep=2; c.nTrain=55; c.snr=45;
+c.fixed=struct('radius',6,'fPerm',.35);
+for mode=["matched","mismatched","oracle"]
+    c.mode=mode; a=noise_nlls(c); b=noise_polynomial(c);
+    verifyEqual(t,a.truth,b.truth); verifyEqual(t,a.observed,b.observed);
+    r=[a.truth.radius]; f=[a.truth.fPerm];
+    if mode=="matched"
+        verifyEqual(t,r,6+0*r); verifyEqual(t,f,.35+0*f);
+    else
+        verifyGreaterThan(t,range(r),.1); verifyGreaterThan(t,range(f),.01);
+    end
+    if mode=="mismatched", signals=a.observed; end
+    if mode=="oracle", verifyEqual(t,a.observed,signals); end
+    for result={a,b}
+        h=result{1}.estimate;
+        if mode=="oracle"
+            verifyEqual(t,[h.radius],r); verifyEqual(t,[h.fPerm],f);
+        else
+            verifyEqual(t,[h.radius],6+0*r); verifyEqual(t,[h.fPerm],.35+0*f);
+        end
+        verifyEqual(t,[h.fSphere]+[h.fECS]+[h.fPerm],ones(size(r)),'AbsTol',1e-12);
+    end
+    if mode~="mismatched"
+        verifyEqual(t,[a.start.fECS],[a.truth.fECS],'AbsTol',1e-12);
+        verifyEqual(t,[a.start.tau],[a.truth.tau],'AbsTol',1e-12);
+    end
+end
+end
+
+function testAllFixedAndIsotropic(t)
+m=TMImix([0 20 0;1 30 0],"dot"); p=m.defaults();
+S=m.invariants(p); P=m.fitPlan(p);
+verifyEqual(t,P.dimension,0); verifyEqual(t,S,[1 0;1 0],'AbsTol',1e-14); verifyEqual(t,m.fitNLLS(S,p,p),p);
+reg=tmix.PolyRegressor(m,p,cat(3,S,S),[p p],Degree=3);
+verifyEqual(t,reg.predict(S),p);
+end
+
+function testPolynomialPredictsUnseenP2(t)
+m=TMImix([.7 20 4;2 40 4],"stick"); p=m.defaults(); s=p; s.p2=[.1 .9];
+pt=repmat(p,40,1); S=zeros(2,2,40);
+for i=1:numel(pt)
+    pt(i).p2=.1+.8*(i-1)/39;
+    S(:,:,i)=m.invariants(pt(i));
+end
+r=tmix.PolyRegressor(m,s,S,pt,Degree=2,Ridge=1e-8);
+p.p2=.526; h=r.predict(m.invariants(p));
+verifyEqual(t,h.p2,p.p2,'AbsTol',1e-6); verifyEqual(t,h.Dstick,p.Dstick);
+end
