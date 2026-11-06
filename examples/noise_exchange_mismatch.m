@@ -1,14 +1,27 @@
-function result = noise_exchange_mismatch(c,exchangeTime)
+function result = noise_exchange_mismatch(c,exchangeTime,fitSNR)
 % Sample exchanging tissues once and fit the identical trials with both estimators.
+% Optional fitSNR selects a single condition after simulating the full cohort.
 validateattributes(exchangeTime,{'numeric'},{'scalar','real','positive','nonnan'});
 assert(isequal(c.parts,["stick","ecs","sphere"]) && c.mode=="free" && ~isfield(c,'model'), ...
     'Use noise_config(["stick","ecs","sphere"],protocol) and c.mode="free".');
 assert(ismember(c.noise,["gaussian","rician"]),'Choose Gaussian or Rician noise.');
+if nargin==3
+    validateattributes(fitSNR,{'numeric'},{'scalar','positive','real','nonnan'});
+    assert(ismember(fitSNR,c.snr),'Requested fit SNR is absent from the simulation schedule.');
+end
 forward = c;
 forward.parts = ["permeableStick","ecs","sphere"];
 [model,acq] = acquisition(forward);
 draw = tmix.tissueSampler(model,model.freeBounds(),c.testPrior,struct('tau',exchangeTime));
 data = sample_noise_trials(c,acq,model.defaults(),draw);
+result.simulationSNRs = c.snr;
+if nargin==3
+    selected = data.trials.snr==fitSNR;
+    data.truth = data.truth(selected);
+    data.trials = data.trials(selected,:);
+    data.observed = data.observed(:,:,selected);
+    c.snr = fitSNR;
+end
 result.forwardTruth = data.truth;
 result.exchangeTime = exchangeTime;
 

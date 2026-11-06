@@ -196,4 +196,15 @@ ref.mode="matched"; ref.fixed=struct('tau',10);
 r = noise_polynomial(ref);
 verifyEqual(t,r.truth,p.forwardTruth);
 verifyEqual(t,r.observed,a.observed);
+
+% Selecting a single SNR preserves the cohort and corresponding noise draws.
+one = noise_exchange_mismatch(c,10,50);
+keep = a.trials.snr==50;
+verifyEqual(t,one.simulationSNRs,c.snr);
+verifyEqual(t,one.forwardTruth,p.forwardTruth(keep));
+verifyEqual(t,one.nlls.trials,a.trials(keep,:));
+verifyEqual(t,one.nlls.observed,a.observed(:,:,keep));
+verifyEqual(t,one.polynomial.observed,one.nlls.observed);
+verifyEqual(t,one.polynomial.config.snr,50);
+verifyNumElements(t,one.polynomial.regressors,1);
 end
