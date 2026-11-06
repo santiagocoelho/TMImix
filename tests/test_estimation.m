@@ -237,3 +237,51 @@ verifyEqual(t,a.trials.startSSE(noisy),reshape(sum(deltaSignal.^2,[1 2]),[],1),'
 verifyGreaterThan(t,min(a.trials.startSSE(noisy)),0);
 verifyLessThan(t,a.trials.sse(noisy),a.trials.startSSE(noisy));
 end
+
+function testExchangeBiasAndPrecision(t)
+[b,Delta] = ndgrid([0 1 4 10],[10 40 80]);
+protocol = [b(:),Delta(:),24*ones(numel(b),1)];
+protocol(protocol(:,1)==0,3) = 1;
+c = noise_config(["permeableStick","ecs","sphere"],protocol);
+c.mode="free"; c.snr=100; c.nTissue=3; c.nRep=3; c.nTrain=30; c.degree=1;
+c.testPrior.fractionAlpha=[4 4 2]; fixed=struct('DePar',1.6,'DePerp',.525);
+testTau=[5 40]; c.trainPrior.tau=testTau;
+[fits,M] = compare_exchange_assumptions(c,testTau,fixed);
+ref = fits.permeable_free;
+verifyEqual(t,height(M),76);  % 2 methods × (10 + 9 + 10 + 9)
+for key=string(fieldnames(fits))'
+    r = fits.(key);
+    verifyEqual(t,r.forwardTruth,ref.forwardTruth);
+    verifyEqual(t,r.exchangeTime,testTau);
+    tau = [r.forwardTruth.tau];
+    verifyTrue(t,all(tau>=5 & tau<=40));
+    verifyGreaterThan(t,range(tau),0);
+    if isfield(r.nlls.truth,'tau')
+        verifyEqual(t,[r.nlls.start.tau],tau,'AbsTol',1e-12);
+        verifyTrue(t,all([r.polynomial.trainingTruth.tau]>=5 & [r.polynomial.trainingTruth.tau]<=40));
+    end
+    verifyEqual(t,r.nlls.observed,ref.nlls.observed);
+    verifyEqual(t,r.polynomial.observed,r.nlls.observed);
+    verifyEqual(t,r.nlls.trials.fibreAxis,ref.nlls.trials.fibreAxis);
+    if endsWith(key,"fixed_ECS")
+        for k=["DePar","DePerp"]
+            verifyEqual(t,[r.nlls.start.(k)],repmat(fixed.(k),1,9));
+            verifyEqual(t,[r.nlls.estimate.(k)],repmat(fixed.(k),1,9));
+            verifyEqual(t,[r.polynomial.estimate.(k)],repmat(fixed.(k),1,9));
+            verifyEqual(t,[r.polynomial.trainingTruth.(k)],repmat(fixed.(k),1,c.nTrain));
+            verifyGreaterThan(t,range([r.forwardTruth.(k)]),0);
+        end
+    end
+    row = M(M.assumption==key & M.method=="nlls" & M.parameter=="radius",:);
+    err = reshape([r.nlls.estimate.radius]-[r.nlls.truth.radius],c.nRep,[]);
+    sd = sqrt(mean(var(err,0,1)));
+    verifyEqual(t,row.withinTissueSD,sd,'AbsTol',1e-12);
+    verifyEqual(t,row.bias,mean(err,'all'),'AbsTol',1e-12);
+    verifyEqual(t,row.RMSE,sqrt(mean(err.^2,'all')),'AbsTol',1e-12);
+    baseline = M(M.assumption=="permeable_free" & M.method=="nlls" & M.parameter=="radius",:);
+    verifyEqual(t,row.biasShiftOverMatchedSD,(row.bias-baseline.bias)/baseline.withinTissueSD,'AbsTol',1e-10);
+end
+verifyTrue(t,all(isnan(M.biasOverRepeatSD(M.fixed))));
+verifyEqual(t,M.withinTissueSD(M.fixed),zeros(nnz(M.fixed),1),'AbsTol',1e-14);
+verifyFalse(t,any(M.parameter=="tau" & startsWith(M.assumption,"impermeable")));
+end

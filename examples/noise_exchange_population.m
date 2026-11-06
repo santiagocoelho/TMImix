@@ -11,12 +11,8 @@ if nargin==3
     validateattributes(fitSNR,{'numeric'},{'scalar','positive','real','nonnan'});
     assert(ismember(fitSNR,c.snr),'Requested fit SNR is absent from the simulation schedule.');
 end
-forward = c;
-forward.parts = exchangingParts;
-[model,acq] = acquisition(forward);
-draw = tmix.tissueSampler(model,model.freeBounds(),c.testPrior,struct('tau',exchangeTime));
-data = sample_noise_trials(c,acq,model.defaults(),draw);
-result.simulationSNRs = c.snr;
+data = sample_exchange_data(c,exchangeTime);
+simulationSNRs = c.snr;
 if nargin==3
     selected = data.trials.snr==fitSNR;
     data.truth = data.truth(selected);
@@ -24,18 +20,6 @@ if nargin==3
     data.observed = data.observed(:,:,selected);
     c.snr = fitSNR;
 end
-result.forwardTruth = data.truth;
-result.exchangeTime = exchangeTime;
-
-% Map the two stick parameters into the fit schema. All other truths carry over.
-if ~matched
-    shared = rmfield(data.truth,{'tau','fPerm','Dperm'});
-    [shared.fStick] = deal(data.truth.fPerm);
-    [shared.Dstick] = deal(data.truth.Dperm);
-    data.truth = orderfields(shared,c.prior);
-end
-fprintf('Fitting %d trials by NLLS, starting at the corresponding ground truths.\n',height(data.trials));
-result.nlls = run_noise(c,"nlls",data,matched);
-fprintf('Training on %d independent tissues from the fit model per SNR.\n',c.nTrain);
-result.polynomial = run_noise(c,"polynomial",data);
+result = fit_exchange_data(c,data,exchangeTime,matched);
+result.simulationSNRs = simulationSNRs;
 end

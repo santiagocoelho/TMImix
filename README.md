@@ -29,6 +29,23 @@ Run `run('examples/demo_exchange_high_snr.m')` for the [b₀ SNR = 10⁶ sanity 
 
 NLLS starts from each tissue's full ground truth. For every candidate parameter vector, it predicts directional signals using the simulated fibre axis, then applies the same finite-direction SH projection used to form the observations. Only the resulting S₀ and S₂ enter the residual. This synthetic check treats the fibre axis as known acquisition geometry relative to the tissue. The saved `nlls.start`, `nlls.trials.startSSE` and `nlls.trials.sse` allow comparison of the actual optimizer starts and the initial and final residuals. The four scatter figures and `population.mat` go to `results/exchange_high_snr_matched/`.
 
+### Compare stick permeability and fixing both ECS diffusivities
+
+Run `run('examples/demo_compare_exchange_assumptions.m')` or pass the full [script path](examples/demo_compare_exchange_assumptions.m) to MATLAB's `run`. Edit **`targetSNR`** at the top (default 100). The generator varies every tissue parameter, including both ECS diffusivities and exchange time. Set **`testTau`** to the desired uniform range in ms (default `[5 40]`). The default polynomial training law for τ uses the same range. Every estimator and assumption receives the same tissues, orientations, normalized S₀/S₂ measurements and noise draws. Both stick models use the same finite-direction projection in NLLS. NLLS starts at the feasible truth for each assumption. Polynomial training uses that assumption's kernel and constraints at the requested SNR.
+
+| Stick model in fit | ECS diffusivities in fit |
+|---|---|
+| Permeable, with free exchange time | Both free |
+| Impermeable | Both free |
+| Permeable, with free exchange time | Both fixed at their population means |
+| Impermeable | Both fixed at their population means |
+
+The two **`fixedECS`** values are the means of the generating priors, 1.6 µm²/ms axial and 0.525 µm²/ms radial for the default uniform distributions. For custom sampling functions, enter their known means in this setting. The defaults use 300 tissues, four independent noise draws per tissue and 6,000 independent training examples per regressor. Keep at least two repeats to measure precision. The script can use four local workers for NLLS with Parallel Computing Toolbox. Set `c.nllsWorkers=0` for serial execution.
+
+The output directory is `results/exchange_assumptions/snr_<SNR>/`. Each of the four assumption subdirectories retains both estimators’ ground-truth-versus-fit scatter figures, with a single paired draw per tissue. The ground truths vary along the horizontal axis even when the estimator fixes that parameter. This produces horizontal bands at the prescribed ECS values. The permeable fits include the varying τ truth and its fitted value. The bias and SD printed inside these scatter panels describe the displayed draw across tissues. **`bias_precision.png` and `bias_precision.csv` use all repeats**, including flagged NLLS fits. Bars show ±1 repeat SD, computed as the square root of the mean of the per-tissue sample variances. A signed bias of one repeat SD means that the average error is as large as a typical noise fluctuation.
+
+The CSV gives signed bias, across-population error SD, within-tissue repeat SD, RMSE and nonconvergence counts. `biasOverRepeatSD` uses each fit's own precision. `biasShiftOverMatchedSD` measures the change in bias from the permeable, free-ECS fit in units of that estimator's matched repeat SD. Fixed parameters have zero repeat SD and an undefined own-SD ratio. Their RMSE still measures errors across tissues. The impermeable fits have no exchange-time estimate. `comparison.mat` contains per-trial truths, estimates, observations, exit flags and both regressor and fit configurations.
+
 ## Run a noise experiment
 
 Choose the active compartments and supply one **[b, Delta, Ndirs]** row per shell. This example uses all six compartments, eight diffusion-weighted shells and six b=0 repetitions.

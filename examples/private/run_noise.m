@@ -37,21 +37,26 @@ phat = truth; flag = nan(n,1); sse = flag; regressors = cell(1,numel(c.snr));
 startSSE = nan(n,1);
 start = truth([]); trainingTruth = truth([]);
 if method=="nlls"
-    for j = 1:n
-        if n>=200 && mod(j-1,100)==0, fprintf('NLLS trial %d/%d\n',j,n); end
+    workers = 0;
+    if isfield(c,'nllsWorkers'), workers = c.nllsWorkers; end
+    fibreAxes = zeros(n,3);
+    if matchProjection, fibreAxes = trials.fibreAxis; end
+    start = truth;
+    parfor (j = 1:n,workers)
+        if workers==0 && n>=200 && mod(j-1,100)==0, fprintf('NLLS trial %d/%d\n',j,n); end
         imposed = fit;
         if c.mode=="oracle", imposed = override(fit,truth(j),keys); end
         if matchProjection
             % Use the simulated fibre axis and exactly the same finite-direction
             % measurement operator. The optimizer still sees only S0 and S2.
-            v = trials.fibreAxis(j,:);
+            v = fibreAxes(j,:);
             predict = @(p) project_shell_signals(noise_directions(p,acq,v),acq);
             [phat(j),info] = m.fitNLLS(S(:,:,j),imposed,truth(j),Predict=predict);
         else
             [phat(j),info] = m.fitNLLS(S(:,:,j),imposed,truth(j));
         end
         startSSE(j) = info.startSSE;
-        flag(j) = info.exitflag; sse(j) = info.sse; start(j,1) = info.start;
+        flag(j) = info.exitflag; sse(j) = info.sse; start(j) = info.start;
     end
 else
     validateattributes(c.nTrain,{'numeric'},{'scalar','integer','>=',2});

@@ -1,4 +1,4 @@
-function files = plot_exchange_population(population,outputDir)
+function files = plot_exchange_population(population,outputDir,plotRep)
 % Each column uses identical x/y limits across SNRs and both estimators.
 groups = {["fStick","fECS","fSphere","p2"], ["Dstick","DePar","DePerp","Dsoma","radius"]};
 groupNames = ["fractions_p2","diffusivities_radius"];
@@ -12,6 +12,17 @@ if ismember("permeableStick",population.nlls.config.parts)
     titles{2}(end+1) = "Exchange time (ms)";
     groupNames(2) = "diffusivities_radius_tau";
     description = "matched permeable sticks, ECS and spheres";
+    if isscalar(population.nlls.config.prior.DePar), description = "permeable sticks, ECS and spheres"; end
+end
+show = true(height(population.nlls.trials),1);
+singleRep = nargin==3 && ~isempty(plotRep);
+if singleRep
+    show = population.nlls.trials.rep==plotRep;
+    assert(any(show),'The selected noise repetition is absent.');
+end
+spec = population.nlls.config.prior;
+if isscalar(spec.DePar) && isscalar(spec.DePerp)
+    description = description+sprintf('   ·   ECS fixed at (%g, %g) µm²/ms',spec.DePar,spec.DePerp);
 end
 methods = ["nlls","polynomial"]; methodTitles = ["NLLS","Polynomial regression"];
 snrs = unique(population.nlls.trials.snr);
@@ -21,7 +32,7 @@ for g = 1:numel(groups)
     limits = zeros(numel(params),2);
     for col = 1:numel(params)
         name = params(col);
-        v = [population.nlls.truth.(name),population.nlls.estimate.(name),population.polynomial.estimate.(name)];
+        v = [population.nlls.truth(show).(name),population.nlls.estimate(show).(name),population.polynomial.estimate(show).(name)];
         lo = min(v); hi = max(v);
         pad = 0.04*(hi-lo);
         if pad==0, pad=0.05*max(1,abs(lo)); end
@@ -37,11 +48,21 @@ for g = 1:numel(groups)
             layout = tiledlayout(fig,numel(rows),numel(params),'TileSpacing','compact','Padding','compact');
             title(layout,sprintf('%s   ·   %s',methodTitles(m),description), ...
                 'FontSize',15);
-            subtitle(layout,sprintf('Ground-truth τ = %g ms   ·   %d shared tissues   ·   noise realizations per tissue at each b_0 SNR = %d', ...
-                population.exchangeTime,result.config.nTissue,result.config.nRep),'FontSize',10);
+            if isscalar(population.exchangeTime)
+                tauLabel = sprintf('Ground-truth τ = %g ms',population.exchangeTime);
+            else
+                tauLabel = sprintf('Ground-truth τ uniform from %g to %g ms',population.exchangeTime);
+            end
+            caption = tauLabel+sprintf("   ·   %d shared tissues",result.config.nTissue);
+            if singleRep
+                caption = caption+sprintf("   ·   noise draw %d of %d shown",plotRep,result.config.nRep);
+            else
+                caption = caption+sprintf("   ·   noise realizations per tissue at each b_0 SNR = %d",result.config.nRep);
+            end
+            subtitle(layout,caption,'FontSize',10);
             xlabel(layout,'Ground truth'); ylabel(layout,'Fitted value');
             for row = 1:numel(rows)
-                use = result.trials.snr==rows(row);
+                use = show & result.trials.snr==rows(row);
                 flagged = result.trials.flag(use)<=0;
                 for col = 1:numel(params)
                     ax = nexttile(layout); name = params(col);
@@ -51,7 +72,7 @@ for g = 1:numel(groups)
                     if col==1, ylabel(ax,sprintf('SNR %g',rows(row))); end
                     if row<numel(rows), ax.XTickLabel = []; end
                     if row==1 && col==1
-                        if ~any(result.trials.flag<=0), handles(end)=[]; end
+                        if ~any(result.trials.flag(show)<=0), handles(end)=[]; end
                         key = legend(ax,handles,'Location','southoutside','Orientation','horizontal', ...
                             'Box','off','AutoUpdate','off');
                         key.Layout.Tile = 'south';
