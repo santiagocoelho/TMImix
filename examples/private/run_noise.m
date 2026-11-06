@@ -1,8 +1,4 @@
-function out = run_noise(c,method)
-validateattributes(c.nTissue,{'numeric'},{'scalar','integer','positive'});
-validateattributes(c.nRep,{'numeric'},{'scalar','integer','positive'});
-validateattributes(c.snr,{'numeric'},{'vector','positive','real','nonempty','nonnan'});
-assert(numel(unique(c.snr))==numel(c.snr),'List each b=0 SNR once.');
+function out = run_noise(c,method,data)
 assert(ismember(c.mode,["free","matched","oracle","mismatched"]),'Unknown constraint mode.');
 assert(ismember(c.noise,["gaussian","rician"]),'Unknown directional noise model.');
 [m,acq] = acquisition(c);
@@ -28,31 +24,19 @@ assert(all(ismember(keys,string(fieldnames(c.prior)))),'Unknown fixed parameter.
 for k = keys, assert(isscalar(fixed.(k)),'Fixed values must be scalar.'); end
 fit = override(c.prior,fixed,keys);
 fitPlan = m.fitPlan(fit);
-testFixed = struct();
-if c.mode=="matched", testFixed = fixed; end
-testDraw = tmix.tissueSampler(m,c.prior,c.testPrior,testFixed);
-
-old = rng; finish = onCleanup(@()rng(old)); %#ok<NASGU>
-rng(c.seed,'twister');
-n = c.nTissue*c.nRep*numel(c.snr); N = size(m.protocol,1);
-truth = repmat(m.defaults(),n,1); S = zeros(N,2,n);
-tissue = zeros(n,1); snr = zeros(n,1); rep = zeros(n,1); b0Scale = ones(n,1); j = 0;
-% Finish all held-out measurements before training or fitting either model.
-for i = 1:c.nTissue
-    p = testDraw();
-    clean = simulate(p,acq);
-    for a = reshape(c.snr,1,[])
-        for h = 1:c.nRep
-            j = j+1; truth(j) = p;
-            [S(:,:,j),b0Scale(j)] = observe(clean,acq,a,c.noise);
-            tissue(j) = i; snr(j) = a; rep(j) = h;
-        end
-    end
+if nargin < 3
+    testFixed = struct();
+    if c.mode=="matched", testFixed = fixed; end
+    testDraw = tmix.tissueSampler(m,c.prior,c.testPrior,testFixed);
+    data = sample_noise_trials(c,acq,m.defaults(),testDraw);
 end
+truth = data.truth; S = data.observed; trials = data.trials;
+n = numel(truth); N = size(S,1);
 phat = truth; flag = nan(n,1); sse = flag; regressors = cell(1,numel(c.snr));
 start = truth([]); trainingTruth = truth([]);
 if method=="nlls"
     for j = 1:n
+        if n>=200 && mod(j-1,100)==0, fprintf('NLLS trial %d/%d\n',j,n); end
         imposed = fit;
         if c.mode=="oracle", imposed = override(fit,truth(j),keys); end
         [phat(j),info] = m.fitNLLS(S(:,:,j),imposed,truth(j));
@@ -60,23 +44,30 @@ if method=="nlls"
     end
 else
     validateattributes(c.nTrain,{'numeric'},{'scalar','integer','>=',2});
+    old = rng; finish = onCleanup(@()rng(old)); %#ok<NASGU>
     rng(c.seed+1,'twister');
     trainLaws = struct();
     if isfield(c,'trainPrior'), trainLaws = c.trainPrior; end
-    known = strings(1,0); trainFixed = fixed;
-    if c.mode=="oracle", known = keys; trainFixed = struct(); end
+    known = strings(1,0);
+    if c.mode=="oracle", known = keys; end
+    % Every constant fit value also constrains the training labels, except
+    % per-tissue oracle covariates. Population priors can still differ.
+    trainFixed = struct();
+    for k = string(fieldnames(fit))'
+        if isscalar(fit.(k)) && ~ismember(k,known), trainFixed.(k) = fit.(k); end
+    end
     trainDraw = tmix.tissueSampler(m,c.prior,trainLaws,trainFixed);
     trainingTruth = repmat(m.defaults(),c.nTrain,1);
     clean = zeros(acq.nMeasurements,c.nTrain);
     for i = 1:c.nTrain
         trainingTruth(i) = trainDraw();
-        clean(:,i) = simulate(trainingTruth(i),acq);
+        clean(:,i) = noise_directions(trainingTruth(i),acq);
     end
     for a = 1:numel(c.snr)
         X = zeros(N,2,c.nTrain);
-        for i = 1:c.nTrain, X(:,:,i) = observe(clean(:,i),acq,c.snr(a),c.noise); end
+        for i = 1:c.nTrain, X(:,:,i) = noise_invariants(clean(:,i),acq,c.snr(a),c.noise); end
         R = tmix.PolyRegressor(m,fit,X,trainingTruth,Degree=c.degree,Ridge=c.ridge,Known=known);
-        ix = snr==c.snr(a);
+        ix = trials.snr==c.snr(a);
         if isempty(known)
             phat(ix) = R.predict(S(:,:,ix));
         else
@@ -86,9 +77,10 @@ else
         regressors{a} = R;
     end
 end
+trials.flag = flag; trials.sse = sse;
 out = struct('config',c,'method',method,'protocol',acq.protocol,'truth',truth, ...
     'trainingTruth',trainingTruth,'estimate',phat,'start',start,'observed',S, ...
-    'trials',table(tissue,rep,snr,b0Scale,flag,sse),'regressors',{regressors});
+    'trials',trials,'regressors',{regressors});
 out.metrics = metrics(out);
 show = ismember(out.metrics.parameter,[keys,fitPlan.freeFractions,fitPlan.names]);
 disp(out.metrics(show,:));
@@ -97,40 +89,6 @@ end
 
 function s = override(s,p,keys)
 for k = keys, s.(k) = p.(k); end
-end
-
-function Y = simulate(p,acq)
-% A single tissue orientation applies to every shell, including different grids.
-v = randn(1,3); v = v/norm(v);
-p2 = 0; if isfield(p,'p2'), p2 = p.p2; end
-Y = ones(acq.nMeasurements,1);
-for g = acq.groups
-    S = g.model.invariants(p);
-    directional = g.model.kernel(p,g.dirs*v');
-    Y(g.index) = (1-p2)*S(:,1)' + p2*directional';
-end
-end
-
-function [S,scale] = observe(clean,acq,snr,noise)
-% Unit true baseline gives independent directional noise with sigma=1/SNR.
-A = clean + randn(size(clean))/snr;
-if noise=="rician", A = hypot(A,randn(size(A))/snr); end
-scale = 1;
-if acq.normalizeB0
-    scale = mean(A(acq.baselineIndices));
-    assert(scale>0,'Nonpositive measured b=0 mean. Use more baseline repeats or a higher SNR.');
-    A = A/scale;
-end
-S = zeros(height(acq.protocol),2);
-for g = acq.groups
-    block = reshape(A(g.index),size(g.index));
-    S(g.shells,:) = tmix.measure(block,g.W);
-end
-if ~isempty(acq.baselineRows)
-    means = accumarray(acq.shellOfMeasurement(acq.baselineIndices),A(acq.baselineIndices), ...
-        [height(acq.protocol),1],@mean);
-    S(acq.baselineRows,1) = means(acq.baselineRows);
-end
 end
 
 function T=metrics(out)

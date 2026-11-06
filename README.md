@@ -6,9 +6,22 @@ Start MATLAB in this directory and run `addpath(pwd,'examples')`. The forward mo
 
 ## Fit exchanging tissue with impermeable sticks
 
-Run `run('examples/demo_exchange_mismatch.m')` from the repository root, or pass the full script path to `run` from any MATLAB folder. The [example](examples/demo_exchange_mismatch.m) generates noiseless, normalized S₀ and S₂ for one tissue with permeable sticks, ECS and impermeable spheres at τ = 10 ms. Both estimators fit those same signals with impermeable sticks, ECS and spheres. NLLS starts at the corresponding ground-truth parameters. The quadratic regressor trains on 2,400 independently sampled impermeable tissues.
+Run `run('examples/demo_exchange_mismatch.m')` from the repository root, or pass the full script path to `run` from any MATLAB folder. The [population example](examples/demo_exchange_mismatch.m) samples permeable sticks, ECS and impermeable spheres with the same exchange time (τ = 10 ms) in every test tissue. NLLS and polynomial regression fit the **same noisy S₀ and S₂** using impermeable sticks, ECS and spheres. The stick fraction and diffusivity in each fit correspond to the forward tissue's `fPerm` and `Dperm`. Each NLLS fit starts at its tissue's shared ground-truth values. A separate quadratic regressor trains at each SNR on an independent population of impermeable tissues with the same acquisition and noise process.
 
-The script prints the truth and both estimates for every shared parameter, plus signal RMSE for S₀ and S₂. The figure in `results/exchange_mismatch/signal_fits.png` shows how each fit follows the signal across diffusion times at each b-value. Edit `truth`, the protocol, `bounds`, or `trainPrior` in the script. Set `truth.tau = Inf` to run the same comparison with impermeable ground truth.
+The default protocol crosses b = [0, 1, 2, 5, 10, 15] ms/µm² with Δ = 10:10:80 ms using δ = 6 ms throughout. At each Δ it acquires one b₀ and 64 directions per nonzero b. The noise standard deviation per direction is 1 / b₀ SNR before normalization by the pooled noisy b₀ mean. The example uses 300 shared test tissues, one realization per tissue per SNR, b₀ SNRs of 50, 100, 250 and 500, and 6,000 training tissues. Edit `countsPerB`, `c.snr`, `c.nTissue`, `c.nRep`, `c.nTrain`, `c.testPrior` and `c.trainPrior` in the settings section. Set `c.noise="rician"` for magnitude data. A scalar in `c.prior` fixes that parameter in the estimators and their polynomial training labels.
+
+The example writes `protocol.png`, the paired results in `population.mat`, and four scatter figures under `results/exchange_mismatch/`. Each estimator has a figure for fractions and p₂ and a figure for diffusivities and soma radius. Rows show SNRs and columns show parameters. The dashed line is identity. The brown line joins the mean fits in ground-truth quantile bins. The orange band shows each mean ± one within-bin standard deviation of **fit minus truth**. Bias and SD in the corner use all trials in the panel, including flagged NLLS exits marked in red. Axes match across SNRs and estimators for each parameter.
+
+To redraw the scatter plots from the saved fits, run the following from the repository root.
+
+```matlab
+addpath(pwd,'examples')
+outputDir = fullfile(pwd,'results','exchange_mismatch');
+load(fullfile(outputDir,'population.mat'),'population')
+tmixplots.plot_exchange_population(population,outputDir);
+```
+
+For the original noiseless, single-tissue signal comparison, run [demo_exchange_single_tissue.m](examples/demo_exchange_single_tissue.m). Set `truth.tau = Inf` there for a no-exchange control.
 
 ## Run a noise experiment
 

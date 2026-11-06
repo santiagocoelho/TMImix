@@ -21,10 +21,11 @@ else
     validateattributes(pulse,{'numeric'},{'real','finite','nonnegative','numel',size(rows,1)});
     assert(all(rows(:,1:2)>=0,'all'),'b and Delta must be nonnegative.');
     timing = [rows(:,1:2),pulse];
-    % b=0 permits unspecified timing (Delta=0). No diffusion is encoded.
-    baseline = rows(:,1)==0;
-    timing(baseline,:) = repmat([0 1 0],nnz(baseline),1);
-    pulse(baseline) = 0;
+    % Preserve supplied PGSE timing at b=0. Older protocols can use an
+    % unspecified Delta or a placeholder shorter than the pulse.
+    unspecified = rows(:,1)==0 & (rows(:,2)==0 | pulse>rows(:,2));
+    timing(unspecified,:) = repmat([0 1 0],nnz(unspecified),1);
+    pulse(unspecified) = 0;
     m = TMImix(timing,c.parts,Exchange=c.exchange);
 end
 counts = rows(:,3);

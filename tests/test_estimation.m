@@ -164,3 +164,36 @@ verifyGreaterThan(t,info.exitflag,0);
 verifyLessThan(t,info.sse,sum((obs-m.invariants(p)).^2));
 verifyEqual(t,q.fStick+q.fECS,1,'AbsTol',1e-12);
 end
+
+function testPairedExchangeMismatch(t)
+protocol = [0 10 1; 1 10 24; 4 10 32; 0 40 2; 1 40 24; 4 40 32];
+c = noise_config(["stick","ecs","sphere"],protocol);
+c.delta=6; c.mode="free"; c.snr=[Inf 50]; c.nTissue=3; c.nRep=2; c.nTrain=32;
+c.testPrior.radius = [5 10]; c.testPrior.fractionAlpha = [4 4 2];
+c.prior.radius = 7; c.trainPrior.radius = [5 10];
+p = noise_exchange_mismatch(c,10);
+a = p.nlls; b = p.polynomial;
+verifyEqual(t,a.observed,b.observed);
+verifyEqual(t,a.truth,b.truth);
+verifyEqual(t,a.start(1).radius,7);
+verifyEqual(t,[a.estimate.radius],7*ones(1,12));
+verifyEqual(t,[b.trainingTruth.radius],7*ones(1,c.nTrain));
+verifyEqual(t,[p.forwardTruth.tau],10*ones(1,12));
+verifyEqual(t,[a.truth.fStick],[p.forwardTruth.fPerm]);
+verifyEqual(t,[a.truth.Dstick],[p.forwardTruth.Dperm]);
+verifyEqual(t,b.regressors{1}.model.parts,["stick","ecs","sphere"]);
+verifyEqual(t,a.protocol.delta,6*ones(size(protocol,1),1));
+verifyGreaterThan(t,range([a.truth.radius]),0);
+verifyEqual(t,[a.truth(a.trials.snr==50).radius],[a.truth(a.trials.snr==Inf).radius]);
+verifyEqual(t,a.trials.b0Scale(a.trials.snr==Inf),ones(6,1));
+verifyGreaterThan(t,std(a.trials.b0Scale(a.trials.snr==50)),0);
+
+% Independently run the original exchanging-model simulator on the same seed.
+ref = noise_config(["permeableStick","ecs","sphere"],protocol);
+ref.delta=c.delta; ref.testPrior=c.testPrior; ref.snr=c.snr;
+ref.nTissue=c.nTissue; ref.nRep=c.nRep; ref.nTrain=c.nTrain;
+ref.mode="matched"; ref.fixed=struct('tau',10);
+r = noise_polynomial(ref);
+verifyEqual(t,r.truth,p.forwardTruth);
+verifyEqual(t,r.observed,a.observed);
+end
