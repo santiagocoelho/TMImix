@@ -23,7 +23,11 @@ tmixplots.plot_exchange_population(population,outputDir);
 
 For the original noiseless, single-tissue signal comparison, run [demo_exchange_single_tissue.m](examples/demo_exchange_single_tissue.m). Set `truth.tau = Inf` there for a no-exchange control.
 
-Run `run('examples/demo_exchange_high_snr.m')` for the [b₀ SNR = 10⁶ sanity check](examples/demo_exchange_high_snr.m). It reproduces the sweep's tissues and directions from the same seed, with forward τ = 10 ms by default. NLLS and the SNR-specific polynomial regressor estimate all nine impermeable-model parameters, giving eight independent values because the fractions sum to one. The four ground-truth-versus-fit figures and `population.mat` are saved under `results/exchange_high_snr/`. You can run this script directly from a fresh checkout.
+### Matched high-SNR sanity check
+
+Run `run('examples/demo_exchange_high_snr.m')` for the [b₀ SNR = 10⁶ sanity check](examples/demo_exchange_high_snr.m). Signal generation, NLLS and polynomial training all use permeable sticks exchanging with ECS plus impermeable spheres. The default forward τ is 10 ms for every test tissue. All ten fit parameters are free, including τ. The three fractions sum to one. The training population spans the fit range for τ (5 to 100 ms by default).
+
+NLLS starts from each tissue's full ground truth. For every candidate parameter vector, it predicts directional signals using the simulated fibre axis, then applies the same finite-direction SH projection used to form the observations. Only the resulting S₀ and S₂ enter the residual. This synthetic check treats the fibre axis as known acquisition geometry relative to the tissue. The saved `nlls.start`, `nlls.trials.startSSE` and `nlls.trials.sse` allow comparison of the actual optimizer starts and the initial and final residuals. The four scatter figures and `population.mat` go to `results/exchange_high_snr_matched/`.
 
 ## Run a noise experiment
 

@@ -4,6 +4,15 @@ groups = {["fStick","fECS","fSphere","p2"], ["Dstick","DePar","DePerp","Dsoma","
 groupNames = ["fractions_p2","diffusivities_radius"];
 titles = {["Stick fraction","ECS fraction","Sphere fraction","fODF p_2"], ...
     ["Stick D (µm²/ms)","ECS axial D (µm²/ms)","ECS radial D (µm²/ms)","Soma D (µm²/ms)","Soma radius (µm)"]};
+description = "exchanging tissue fitted with impermeable sticks";
+if ismember("permeableStick",population.nlls.config.parts)
+    groups{1}(1) = "fPerm";
+    groups{2}(1) = "Dperm";
+    groups{2}(end+1) = "tau";
+    titles{2}(end+1) = "Exchange time (ms)";
+    groupNames(2) = "diffusivities_radius_tau";
+    description = "matched permeable sticks, ECS and spheres";
+end
 methods = ["nlls","polynomial"]; methodTitles = ["NLLS","Polynomial regression"];
 snrs = unique(population.nlls.trials.snr);
 files = strings(0,1);
@@ -26,9 +35,9 @@ for g = 1:numel(groups)
                 'Color','white','Units','pixels','Position',[35 45 270*numel(params) 130+235*numel(rows)]);
             fig.Theme = 'light';
             layout = tiledlayout(fig,numel(rows),numel(params),'TileSpacing','compact','Padding','compact');
-            title(layout,sprintf('%s   ·   exchanging tissue fitted with impermeable sticks',methodTitles(m)), ...
+            title(layout,sprintf('%s   ·   %s',methodTitles(m),description), ...
                 'FontSize',15);
-            subtitle(layout,sprintf('τ = %g ms   ·   %d shared tissues   ·   noise realizations per tissue at each b_0 SNR = %d', ...
+            subtitle(layout,sprintf('Ground-truth τ = %g ms   ·   %d shared tissues   ·   noise realizations per tissue at each b_0 SNR = %d', ...
                 population.exchangeTime,result.config.nTissue,result.config.nRep),'FontSize',10);
             xlabel(layout,'Ground truth'); ylabel(layout,'Fitted value');
             for row = 1:numel(rows)

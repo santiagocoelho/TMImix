@@ -208,3 +208,32 @@ verifyEqual(t,one.polynomial.observed,one.nlls.observed);
 verifyEqual(t,one.polynomial.config.snr,50);
 verifyNumElements(t,one.polynomial.regressors,1);
 end
+
+function testMatchedExchangeAtTruth(t)
+% At infinite SNR a matched finite-grid prediction should reproduce every shell.
+[b,Delta] = ndgrid([0 1 3 8 15],[10 40 80]);
+protocol = [b(:),Delta(:),24*ones(numel(b),1)];
+protocol(protocol(:,1)==0,3) = 1;
+c = noise_config(["permeableStick","ecs","sphere"],protocol);
+c.delta=6; c.mode="free"; c.snr=[Inf 1e6]; c.nTissue=3; c.nRep=1; c.nTrain=30; c.degree=1;
+c.testPrior = struct('fractionAlpha',[4 4 2],'radius',[5 9],'p2',[.55 .8]);
+r = noise_exchange_population(c,10);
+a = r.nlls; poly = r.polynomial;
+clean = a.trials.snr==Inf; noisy = ~clean;
+verifyEqual(t,a.truth,r.forwardTruth);
+verifyEqual(t,a.observed,poly.observed);
+verifyEqual(t,table2array(struct2table(a.start)),table2array(struct2table(a.truth)),'AbsTol',1e-12);
+verifyEqual(t,[a.truth.tau],repmat(10,1,6));
+verifyGreaterThan(t,range([poly.trainingTruth.tau]),0);
+verifyNumElements(t,poly.regressors{1}.targets,10);
+verifyEqual(t,a.trials.fibreAxis(clean,:),a.trials.fibreAxis(noisy,:));
+verifyLessThan(t,max(a.trials.startSSE(clean)),1e-24);
+verifyEqual(t,table2array(struct2table(a.estimate(clean))), ...
+    table2array(struct2table(a.truth(clean))),'AbsTol',1e-10);
+% Verify the finite-SNR start residual is entirely accounted for by noise.
+dw = protocol(:,1)>0;
+deltaSignal = a.observed(dw,:,noisy)-a.observed(dw,:,clean);
+verifyEqual(t,a.trials.startSSE(noisy),reshape(sum(deltaSignal.^2,[1 2]),[],1),'AbsTol',1e-19);
+verifyGreaterThan(t,min(a.trials.startSSE(noisy)),0);
+verifyLessThan(t,a.trials.sse(noisy),a.trials.startSSE(noisy));
+end

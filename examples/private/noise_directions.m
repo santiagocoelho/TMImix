@@ -1,6 +1,6 @@
-function Y = noise_directions(p,acq)
+function [Y,v] = noise_directions(p,acq,v)
 % A single tissue orientation applies to every shell, including different grids.
-v = randn(1,3); v = v/norm(v);
+if nargin<3, v = randn(1,3); v = v/norm(v); end
 p2 = 0; if isfield(p,'p2'), p2 = p.p2; end
 Y = ones(acq.nMeasurements,1);
 for g = acq.groups

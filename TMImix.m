@@ -106,9 +106,11 @@ classdef TMImix
         end
 
         function [p,info] = fitNLLS(obj,S,spec,start,opt)
+            % Predict(p) optionally evaluates S0/S2 on the measured gradient grid.
             % Ground-truth starts are for synthetic noise propagation only.
             arguments
                 obj; S (:,2) double {mustBeReal,mustBeFinite}; spec struct; start struct
+                opt.Predict (1,1) function_handle = @(p) obj.invariants(p)
                 opt.Weights (:,2) double {mustBeNonnegative,mustBeFinite} = ones(size(S))
             end
             assert(isequal(size(S),[size(obj.protocol,1) 2],size(opt.Weights)), ...
@@ -119,7 +121,8 @@ classdef TMImix
             info.nFree = numel(x);
             info.nObservations = nnz(use);
             assert(isempty(x) || any(use,'all'),'Include a weighted diffusion measurement.');
-            residual=@(x) weightedResidual(obj,P,x,S,opt.Weights,use);
+            residual=@(x) weightedResidual(opt.Predict,P,x,S,opt.Weights,use);
+            info.startSSE=sum(residual(x).^2);
             if isempty(x)
                 p=info.start; info.exitflag=1; r=residual(x);
             else
@@ -168,6 +171,8 @@ classdef TMImix
     end
 end
 
-function r=weightedResidual(model,plan,x,data,weights,use)
-r=(model.invariants(plan.decode(x))-data).*sqrt(weights); r=r(use);
+function r=weightedResidual(predict,plan,x,data,weights,use)
+prediction=predict(plan.decode(x));
+assert(isequal(size(prediction),size(data)),'Predict must return one [S0 S2] row per shell.');
+r=(prediction-data).*sqrt(weights); r=r(use);
 end

@@ -1,4 +1,5 @@
-function out = run_noise(c,method,data)
+function out = run_noise(c,method,data,matchProjection)
+if nargin<4, matchProjection = false; end
 assert(ismember(c.mode,["free","matched","oracle","mismatched"]),'Unknown constraint mode.');
 assert(ismember(c.noise,["gaussian","rician"]),'Unknown directional noise model.');
 [m,acq] = acquisition(c);
@@ -33,13 +34,23 @@ end
 truth = data.truth; S = data.observed; trials = data.trials;
 n = numel(truth); N = size(S,1);
 phat = truth; flag = nan(n,1); sse = flag; regressors = cell(1,numel(c.snr));
+startSSE = nan(n,1);
 start = truth([]); trainingTruth = truth([]);
 if method=="nlls"
     for j = 1:n
         if n>=200 && mod(j-1,100)==0, fprintf('NLLS trial %d/%d\n',j,n); end
         imposed = fit;
         if c.mode=="oracle", imposed = override(fit,truth(j),keys); end
-        [phat(j),info] = m.fitNLLS(S(:,:,j),imposed,truth(j));
+        if matchProjection
+            % Use the simulated fibre axis and exactly the same finite-direction
+            % measurement operator. The optimizer still sees only S0 and S2.
+            v = trials.fibreAxis(j,:);
+            predict = @(p) project_shell_signals(noise_directions(p,acq,v),acq);
+            [phat(j),info] = m.fitNLLS(S(:,:,j),imposed,truth(j),Predict=predict);
+        else
+            [phat(j),info] = m.fitNLLS(S(:,:,j),imposed,truth(j));
+        end
+        startSSE(j) = info.startSSE;
         flag(j) = info.exitflag; sse(j) = info.sse; start(j,1) = info.start;
     end
 else
@@ -78,6 +89,7 @@ else
     end
 end
 trials.flag = flag; trials.sse = sse;
+if method=="nlls", trials.startSSE = startSSE; end
 out = struct('config',c,'method',method,'protocol',acq.protocol,'truth',truth, ...
     'trainingTruth',trainingTruth,'estimate',phat,'start',start,'observed',S, ...
     'trials',trials,'regressors',{regressors});
