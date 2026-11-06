@@ -6,45 +6,64 @@ Start MATLAB in this directory and run `addpath(pwd,'examples')`. The forward mo
 
 ## Run a noise experiment
 
+Choose the active compartments and supply one **[b, Delta, Ndirs]** row per shell. This example uses all six compartments, eight diffusion-weighted shells and six b=0 repetitions.
+
 ```matlab
 addpath(pwd,'examples')
-c = noise_config();
-c.fixed = struct('radius',7);   % µm; use struct() for no overrides
-c.testPrior.radius = [4 10];    % ground-truth range when allowed to vary
-c.prior.radius = [4 10];        % cover that range in oracle regression training
-c.mode = "oracle";              % "matched", "oracle", or "mismatched"
+parts = ["stick","ecs","permeableStick","sphere","dot","water"];
+[b,Delta] = ndgrid([0.6 1.5 3 6],[18 40]);
+Ndirs = repmat([12; 20; 32; 48],2,1);
+protocol = [0 0 6; b(:) Delta(:) Ndirs];
+c = noise_config(parts,protocol);
+c.delta = 5;                 % PGSE pulse duration in ms
+c.snr = [30 60];             % per-measurement SNR at b=0
+c.mode = "free";
 nlls = noise_nlls(c);
 poly = noise_polynomial(c);
-nlls.metrics(nlls.metrics.parameter=="tau",:)
 ```
 
-| Mode | Radius in test tissue | Value supplied to the estimator |
-|---|---|---|
-| `matched` | Always 7 µm | Always 7 µm |
-| `oracle` | Drawn from 4–10 µm for each tissue | That tissue's true radius, held fixed across noise repetitions |
-| `mismatched` | Drawn from 4–10 µm for each tissue | Always 7 µm, even when it is wrong |
+Every active parameter has an editable range in `c.prior`. With six compartments there are **14 independent fit parameters**, including five independent fractions because the six fractions sum to one. With one compartment its fraction is one. The default selection in `noise_config()` is permeable sticks, ECS and spheres, with all their parameters free. Set `c.prior.Dsoma=2`, for example, to keep that diffusivity fixed throughout a study. `c.mode="free"` uses the fit bounds directly and ignores `c.fixed`.
 
-The flag applies to all fields of `c.fixed`. For example, `struct('radius',7,'Dperm',2,'fDot',0.04)` fixes three parameters in a model containing all three. Any other parameter can remain fixed across all modes by making it a scalar in both `c.prior` and `c.testPrior`. To fit radius freely, remove it from `c.fixed` and set a range in `c.prior`. A single scalar in `c.fixed` is a placeholder in oracle mode: set a range in both priors for a known parameter that should vary. Fraction bounds must still admit total mass one.
+### Specify the test and training populations
 
-The default experiment uses an exchanging stick/ECS pair and impermeable spheres. It measures b = 0.8, 2.5, 6 ms/µm² at Δ = 16, 32, 56 ms (δ = 5 ms), with 64 LTE directions per shell. Eight test tissues have five noise repetitions at each SNR. Increase `nTissue` for population coverage and `nRep` for precision of within-tissue noise estimates. To test a different mixture, change `c.model` and rebuild both priors from that model's `defaults()`.
+`c.testPrior` controls held-out tissues for **both** methods. `c.trainPrior` controls the **polynomial training population**. Set only the fields you want to change. An unspecified field uses its fit bounds from `c.prior`. Test tissue may lie outside the fit bounds to study model mismatch. Training labels for estimated fields must lie within their fit bounds.
 
-- **Noise generation.** Each synthetic fODF is a randomly oriented antipodal fibre of mass `p2` plus a uniform background of mass `1-p2`. Independent Gaussian noise is added to each directional measurement before projecting onto SHs. Set `c.noise="rician"` to take the magnitude after adding complex Gaussian noise. SNR is relative to a known, unit baseline; the experiment does not simulate noise from estimating b=0. Rician noise and the nonnegative S₂ norm can bias uncorrected NLLS.
-- **NLLS.** Every repetition starts at its actual tissue parameters. Under a deliberately wrong constraint, the start keeps the imposed values and reconciles the other parameters with their bounds and the fraction sum. The actual start is returned. This measures local noise sensitivity; it does not demonstrate recovery from an unknown starting point.
-- **Polynomial regression.** For each SNR a separate ridge regression learns from independent synthetic tissues, using S₀ and S₂ with all monomials and interactions through `c.degree` (1, 2 or 3). The default is quadratic. In matched/mismatched mode the training tissue obeys the assumed constraint. In oracle mode only the explicitly known parameters enter as extra covariates, so one conditional model spans the prior; unknown ground truth is never passed to prediction. Predictions obey the same fixed values, bounds and fraction sum as NLLS. Results depend on the protocol, prior, training size, polynomial degree and noise level.
-- **Outputs.** `metrics` gives bias (estimate − truth), SD of errors across trials, pooled within-tissue SD, RMSE and nonconvergence counts. `truth`, `estimate`, `observed` and `trials` preserve every realization, including NLLS exit flags and squared residuals. `regressors` contains the trained predictors. Use `writetable(poly.metrics,'poly_metrics.csv')` to export. The two methods use identical test measurements for a given seed/configuration; oracle and mismatched modes also share identical test data.
+```matlab
+c.testPrior.radius = [6 10];                 % uniform in µm
+c.trainPrior.radius = @() 6 + 4*rand()^2;    % same support, more small radii
+c.testPrior.tau = @() 10*exp(rand()*log(6)); % log-uniform from 10 to 60 ms
+c.trainPrior.tau = [5 100];
+c.testPrior.fractionAlpha = [2 4 2 2 1 1];  % joint Dirichlet, in parts order
+```
 
-As a reproducibility check, with the default seed and **SNR 60**, the two variable-radius modes gave the following results on the *same* 8 tissues × 5 noise draws. A wrong radius affected estimates of both sphere fraction and exchange time:
+Each field accepts a scalar for a point mass, a two-element interval, or a zero-argument function that returns one draw in physical units. A function can implement a discrete, bounded, or empirical distribution, for example `@() samples(randi(numel(samples)))` for a vector of measured radii.
 
-| Estimator | Sphere fraction RMSE: true radius supplied | Sphere fraction RMSE: assume 7 µm | τ RMSE: true radius supplied | τ RMSE: assume 7 µm |
-|---|---:|---:|---:|---:|
-| Ground-truth-start NLLS | 0.0055 | 0.0371 | 8.73 ms | 14.62 ms |
-| Quadratic regression | 0.0066 | 0.0536 | 8.58 ms | 11.55 ms |
+Fractions share a unit total. Individual fraction callbacks draw first and preserve their values. For the remaining fractions you can specify a joint Dirichlet law with positive concentrations in `fractionAlpha`. It allocates the residual mass among free pools, conditional on fixed fractions and truncated to any specified fraction bounds. Without `fractionAlpha`, numeric intervals draw uniformly within the feasible remaining interval at each step. Explicit fraction fields are allocated first in declaration order, then other pools in compartment order. The last free fraction receives the remainder. To give one fraction a prescribed marginal, specify it individually and leave a pool to absorb the remaining mass. Incompatible draws raise an error.
 
-These are results for this synthetic protocol and prior, with other diffusivities fixed. To reproduce, run each estimator twice with `c.mode="oracle"` and `c.mode="mismatched"`; leave the other defaults unchanged.
+### Compare radius constraints
+
+Use the same `c.testPrior.radius=[6 10]` and seed for the following experiments. The mode applies to each field in `c.fixed`.
+
+| Mode | MATLAB settings | Radius in test tissue | Radius held fixed in the fit |
+|---|---|---|---|
+| Matched | `c.mode="matched"; c.fixed=struct('radius',6);` | 6 µm | 6 µm |
+| Oracle | `c.mode="oracle"; c.fixed="radius";` | Uniform from 6 to 10 µm | That tissue's true radius |
+| Mismatched | `c.mode="mismatched"; c.fixed=struct('radius',7);` | Uniform from 6 to 10 µm | 7 µm |
+
+Run `noise_nlls(c)` and `noise_polynomial(c)` after setting each mode. The two estimators see identical test measurements. Oracle and mismatched also share the same tissues and noise draws. If several parameters are known per tissue, set `c.fixed=["radius","Dperm"]` in oracle mode. A struct of field names and values also works in oracle mode, where only the names are used.
+
+In matched and mismatched modes, polynomial training fixes the selected parameters at the estimator's prescribed values. In oracle mode, known parameters vary according to their training distributions and enter the regression as known covariates. Give those training distributions support over the values you intend to supply at prediction.
+
+### Acquisition, noise and outputs
+
+- Supply `c.protocol` as a numeric matrix or a table with columns named `b`, `Delta`, and `Ndirs`. Units are ms/µm² for b and ms for Δ. `c.delta` sets the rectangular PGSE pulse width as one value or one per row. Replace `c.protocol` to change the acquisition after creating the config. Each nonzero-b row uses its requested number of directions and requires at least six for S₂. The SH projection uses the highest supported even order up to `c.L` and retains S₀ and S₂ for fitting.
+- Set `c.snr` to one or more b=0 SNRs. The unweighted signal is one, so each directional measurement gets independent noise with SD `1/SNR`. Set `c.noise="gaussian"` for real Gaussian noise or `"rician"` for complex Gaussian noise followed by magnitude. With b=0 rows, `Ndirs` gives the repeat count and the pooled noisy baseline mean normalizes each realization. With diffusion-weighted rows only, normalization uses the known baseline of one.
+- Each simulated fODF has an antipodal fibre of mass `p2` and a uniform background of mass `1-p2`. The same fibre orientation applies to every shell of a tissue. NLLS starts at the true parameters, made feasible under the imposed constraints. Underdetermined protocols can be run to examine the local noise response around that start. Polynomial fitting uses an independent training set and a separate ridge regression at each SNR, with degree `c.degree` from 1 to 3.
+- Set `c.nTissue`, `c.nRep`, and `c.nTrain` to control the test population, noise draws per tissue and training population. Results include the fitted `protocol`, held-out `truth`, `trainingTruth` for regression, `observed` invariants, `estimate`, and per-trial `b0Scale`. The `metrics` table gives bias, error SD, within-tissue SD and RMSE by parameter and SNR. NLLS also returns starts, exit flags and residual sums of squares. Saved configurations containing the original `model` and `nDirs` fields continue to use that model and its known baseline.
 
 ## Build a kernel and supply an fODF
 
-Each row of the protocol is **[b, Δ, δ]** in ms/µm², ms and ms. Δ is the leading-edge separation of rectangular PGSE pulses; δ is their duration. Divide b-values in s/mm² by 1000. The model supports **LTE only**, a shared fODF across fascicles/pools, a common echo time and signals normalized to b=0. Different rows can have identical b and different timing.
+The low-level forward constructor takes **[b, Δ, δ]** in ms/µm², ms and ms. Δ is the leading-edge separation of rectangular PGSE pulses; δ is their duration. Divide b-values in s/mm² by 1000. The model supports **LTE only**, a shared fODF across fascicles/pools, a common echo time and signals normalized to b=0. Different rows can have identical b and different timing.
 
 ```matlab
 m = TMImix([0 20 5; 2 20 5; 2 50 5], ...

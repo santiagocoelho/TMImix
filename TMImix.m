@@ -49,6 +49,21 @@ classdef TMImix
             if any(ismember(obj.parts,["stick","ecs","permeableStick"])), p.p2=0.6; end
         end
 
+        function bounds = freeBounds(obj)
+            % Editable simulation/fit ranges for every active parameter.
+            ranges = struct('Dstick',[0.5 3], 'DePar',[0.3 2.5], 'DePerp',[0.1 1.5], ...
+                'Dperm',[0.5 3], 'tau',[5 100], 'radius',[3 12], 'Dsoma',[0.5 3], ...
+                'Dwater',[2 3.5], 'p2',[0 1]);
+            bounds = obj.defaults();
+            for name = string(fieldnames(bounds))'
+                if ismember(name,obj.fractions)
+                    bounds.(name) = [0 1];
+                else
+                    bounds.(name) = ranges.(name);
+                end
+            end
+        end
+
         function K = kernel(obj,p,mu)
             % Full angular response, shells x direction cosines (no SH truncation).
             tmix.validate(obj,p,false);
@@ -101,13 +116,18 @@ classdef TMImix
             P=obj.fitPlan(spec); x=P.encode(start);
             info.start=P.decode(x);
             use=obj.protocol(:,1)>0 & opt.Weights>0;
-            assert(nnz(use)>=numel(x),'Fewer weighted observations than free coordinates.');
+            info.nFree = numel(x);
+            info.nObservations = nnz(use);
+            assert(isempty(x) || any(use,'all'),'Include a weighted diffusion measurement.');
             residual=@(x) weightedResidual(obj,P,x,S,opt.Weights,use);
             if isempty(x)
                 p=info.start; info.exitflag=1; r=residual(x);
             else
                 options=optimoptions('lsqnonlin','Display','off','FunctionTolerance',1e-11, ...
                     'StepTolerance',1e-9,'OptimalityTolerance',1e-9);
+                if info.nObservations < info.nFree
+                    options.Algorithm = 'levenberg-marquardt';
+                end
                 [x,~,r,info.exitflag]=lsqnonlin(residual,x,zeros(size(x)),ones(size(x)),options);
                 p=P.decode(x);
             end

@@ -12,9 +12,14 @@ classdef FitPlan
         dimension
     end
     methods
-        function obj=FitPlan(model,spec)
+        function obj=FitPlan(model,spec,fractionOrder)
             tmix.validate(model,spec,true);
             obj.spec=spec; obj.template=spec; f=model.fractions;
+            if nargin==3
+                assert(isequal(sort(fractionOrder),sort(f)), ...
+                    'Fraction order must contain each active pool once.');
+                f=fractionOrder;
+            end
             vary=arrayfun(@(k) ~isscalar(spec.(k)),f);
             obj.freeFractions=f(vary); obj.remaining=1;
             for k=f(~vary), obj.remaining=obj.remaining-spec.(k); end

@@ -82,3 +82,85 @@ r=tmix.PolyRegressor(m,s,S,pt,Degree=2,Ridge=1e-8);
 p.p2=.526; h=r.predict(m.invariants(p));
 verifyEqual(t,h.p2,p.p2,'AbsTol',1e-6); verifyEqual(t,h.Dstick,p.Dstick);
 end
+
+function testAllSixFreeAndMixedProtocol(t)
+parts = ["stick","ecs","permeableStick","sphere","dot","water"];
+c = noise_config(parts);
+n = size(c.protocol,1);
+c.protocol(:,3) = repmat([6;15;32],n/3,1);
+c.protocol = array2table([0 0 3; c.protocol; 0 0 5], ...
+    'VariableNames',{'b','Delta','Ndirs'});
+c.delta = [0;repmat([3;4;5],n/3,1);0];
+c.nTissue=1; c.nRep=1; c.nTrain=22; c.snr=45; c.mode="free";
+c.testPrior.fractionAlpha=2*ones(1,6);
+a=noise_nlls(c); b=noise_polynomial(c);
+verifyEqual(t,a.truth,b.truth); verifyEqual(t,a.observed,b.observed);
+verifyEqual(t,a.protocol.Ndirs,c.protocol.Ndirs);
+verifyEqual(t,a.protocol.L,[0; repmat([2;4;6],n/3,1); 0]);
+verifyEqual(t,a.protocol.delta,c.delta);
+verifyEqual(t,sum(a.observed([1 end],1).*[3;5])/8,1,'AbsTol',1e-14);
+verifyEqual(t,a.observed([1 end],2),[0;0]);
+m=TMImix([1 20 5],parts);
+verifyEqual(t,m.fitPlan(c.prior).dimension,14); % 15 physical fields, one sum constraint
+verifyTrue(t,all(structfun(@(v) numel(v)==2,c.prior)));
+verifyEqual(t,cell2mat(struct2cell(a.start)),cell2mat(struct2cell(a.truth)),'AbsTol',1e-12);
+verifyTrue(t,all(isfinite(cell2mat(struct2cell(b.estimate)))));
+end
+
+function testDistinctPopulationsAndConstraints(t)
+c = noise_config(["sphere","dot"],[0 0 3;1 15 6;2 30 15;4 45 32]);
+c.nTissue=7; c.nRep=1; c.nTrain=40; c.snr=40;
+c.testPrior.radius = [6 10];
+c.trainPrior.radius = @() 4+rand^2;
+c.testPrior.fDot = @() .1+.1*rand;
+c.trainPrior.fDot = [.32 .41];
+for mode = ["matched","mismatched","oracle"]
+    c.mode=mode;
+    switch mode
+        case "matched", c.fixed=struct('radius',6);
+        case "mismatched", c.fixed=struct('radius',7);
+        case "oracle", c.fixed="radius";
+    end
+    a=noise_nlls(c); b=noise_polynomial(c);
+    verifyEqual(t,a.observed,b.observed);
+    rt=[a.truth.radius]; rr=[b.trainingTruth.radius];
+    if mode=="matched"
+        verifyEqual(t,rt,6*ones(size(rt))); verifyEqual(t,rr,6*ones(size(rr)));
+        expected=6*ones(size(rt));
+    else
+        verifyTrue(t,all(rt>=6 & rt<=10)); verifyGreaterThan(t,range(rt),.5);
+        if mode=="oracle"
+            verifyEqual(t,a.observed,saved);
+            verifyTrue(t,all(rr>=4 & rr<=5)); expected=rt;
+        else
+            saved=a.observed;
+            verifyEqual(t,rr,7*ones(size(rr))); expected=7*ones(size(rt));
+        end
+    end
+    verifyEqual(t,[a.estimate.radius],expected); verifyEqual(t,[b.estimate.radius],expected);
+    verifyTrue(t,all([b.trainingTruth.fDot]>=.32 & [b.trainingTruth.fDot]<=.41));
+    verifyTrue(t,all([a.truth.fDot]>=.1 & [a.truth.fDot]<=.2));
+end
+end
+
+function testB0NoiseAndDirectionCount(t)
+% With a pure dot, L=0 coefficient noise and baseline noise are known.
+c=noise_config("dot",[0 0 5;1 20 15;1 40 60]);
+c.nTissue=1; c.nRep=1500; c.nTrain=12; c.snr=20;
+r=noise_polynomial(c); sd=1/c.snr;
+verifyEqual(t,std(r.trials.b0Scale),sd/sqrt(5),'RelTol',.12);
+% Undo the shared normalization before comparing the two shell means.
+raw=squeeze(r.observed(2:3,1,:)).*r.trials.b0Scale';
+verifyEqual(t,std(raw(1,:)),sd/sqrt(15),'RelTol',.18);
+verifyEqual(t,std(raw(2,:)),sd/sqrt(60),'RelTol',.12);
+end
+
+function testUnderDeterminedFit(t)
+m = TMImix([1.5 30 4],["stick","ecs"]);
+p = m.defaults(); s = m.freeBounds(); obs = m.invariants(p)+[.004 .001];
+[q,info] = m.fitNLLS(obs,s,p);
+verifyGreaterThan(t,info.nFree,info.nObservations);
+verifyGreaterThan(t,info.exitflag,0);
+verifyLessThan(t,info.sse,sum((obs-m.invariants(p)).^2));
+verifyEqual(t,q.fStick+q.fECS,1,'AbsTol',1e-12);
+end
