@@ -67,6 +67,12 @@ pdfPath = fullfile(outputDir,'bias_rmse_by_parameter.pdf');
 plot_noise_modes(metrics,modes,units,pdfPath,showFigures);
 fprintf('Wrote %s and metrics.csv\n',pdfPath);
 
+%% Scatter plots of ground truth versus fitted values
+% Rerun this section with comparison in the workspace to reuse the same fits.
+scatterPath = fullfile(outputDir,'ground_truth_vs_fit.pdf');
+plot_noise_scatter(comparison,metrics,modes,units,scatterPath,showFigures);
+fprintf('Wrote %s\n',scatterPath);
+
 function label = constraintText(mode,fixed,units)
 if mode=="oracle"
     names = reshape(string(fixed),1,[]);

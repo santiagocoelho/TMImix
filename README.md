@@ -24,11 +24,13 @@ poly = noise_polynomial(c);
 
 Every active parameter has an editable range in `c.prior`. With six compartments there are **14 independent fit parameters**, including five independent fractions because the six fractions sum to one. With one compartment its fraction is one. The default selection in `noise_config()` is permeable sticks, ECS and spheres, with all their parameters free. Set `c.prior.Dsoma=2`, for example, to keep that diffusivity fixed throughout a study. `c.mode="free"` uses the fit bounds directly and ignores `c.fixed`.
 
-### Plot bias and RMSE across all four modes
+### Plot noise propagation across all four modes
 
 Run `run('examples/demo_compare_estimators.m')` from the repository root. The [example script](examples/demo_compare_estimators.m) fits permeable sticks, ECS, and impermeable spheres with both NLLS and polynomial regression. At the top, set **`matchedFixed`** and **`mismatchedFixed`** independently. Each accepts any active parameter names and physical values, including multiple fields such as `struct('radius',6,'Dsoma',2)`. Set `oracleKnown` separately to the names whose true values are supplied for each tissue. The same settings section defines the protocol, b=0 SNR sweep, priors, and sample counts.
 
 The script writes `results/compare_estimators/bias_rmse_by_parameter.pdf` and `metrics.csv`. Each PDF page shows one parameter in its native units, with one column per mode. Each point pools the held-out tissues and noise repetitions at one SNR. Bias is the mean of estimate minus truth. The CSV includes the per-mode constraints, sample counts and NLLS nonconvergence counts. The individual estimates and truths remain available in the MATLAB workspace, for example in `comparison.mismatched.nlls`.
+
+The final script section writes `results/compare_estimators/ground_truth_vs_fit.pdf` directly from `comparison`. Rerun that section to redraw the scatter plots from existing fits. Each parameter has ground truth on x and the fitted value on y, with equal scales and a dashed identity line. Columns show the four modes and rows show b=0 SNR, with up to four SNRs per page. Each marker represents one tissue and one noise realization. Repeated or exactly constrained fits can coincide. Blue crosses identify NLLS estimates with a nonpositive exit flag.
 
 ### Specify the test and training populations
 

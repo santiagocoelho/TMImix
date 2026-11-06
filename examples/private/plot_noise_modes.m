@@ -2,11 +2,6 @@ function plot_noise_modes(metrics,modes,units,pdfPath,showFigures)
 % One PDF page per parameter. Both methods share an axis, and all modes
 % share the y scale for a given parameter and metric.
 parameters = unique(metrics.parameter,'stable');
-labels = struct('fPerm',"Permeable stick fraction",'fECS',"ECS fraction", ...
-    'fSphere',"Sphere fraction",'DePar',"Axial ECS diffusivity", ...
-    'DePerp',"Radial ECS diffusivity",'Dperm',"Axial diffusivity of permeable sticks", ...
-    'tau',"Exchange time",'radius',"Soma radius",'Dsoma',"Intrasomal diffusivity", ...
-    'p2',"fODF anisotropy");
 snr = unique(metrics.SNR);
 margin = max(1,0.06*(snr(end)-snr(1)));
 methods = ["NLLS","Polynomial regression"];
@@ -19,13 +14,12 @@ if showFigures, visible = "on"; end
 for p = 1:numel(parameters)
     name = parameters(p);
     rows = metrics(metrics.parameter==name,:);
-    unit = "";
-    if isfield(units,name), unit = " ("+units.(name)+")"; end
-    fig = figure('Name',labels.(name),'NumberTitle','off','Color','white', ...
+    label = noise_parameter_title(name,units);
+    fig = figure('Name',label,'NumberTitle','off','Color','white', ...
         'Units','pixels','Position',[60 70 1120 610],'Visible',visible);
     fig.Theme = "light";
     layout = tiledlayout(fig,2,numel(modes),'TileSpacing','compact','Padding','compact');
-    title(layout,labels.(name)+unit,'Interpreter','none','FontSize',17);
+    title(layout,label,'Interpreter','none','FontSize',17);
     fits = rows(rows.method=="NLLS",:);
     nTotal = sum(fits.n);
     nConverged = nTotal-sum(fits.nonconverged);
