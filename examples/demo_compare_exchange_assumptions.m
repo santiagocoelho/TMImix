@@ -34,10 +34,6 @@ writetable(metrics,fullfile(outputDir,'bias_precision.csv'));
 %% Redraw from fits and metrics without running the estimation again
 % Show one paired draw for every tissue, and use all repeats for precision.
 plotRep = 1;  % set [] to show every noise draw against ground truth
-for name = string(fieldnames(fits))'
-    subdir = fullfile(outputDir,name);
-    if ~isfolder(subdir), mkdir(subdir); end
-    tmixplots.plot_exchange_population(fits.(name),subdir,plotRep);
-end
+tmixplots.plot_exchange_assumptions(fits,outputDir,plotRep);
 tmixplots.plot_bias_precision(metrics,outputDir);
 fprintf('Wrote figures, bias_precision.csv and comparison.mat to %s\n',outputDir);

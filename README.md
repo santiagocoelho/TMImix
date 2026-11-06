@@ -42,7 +42,16 @@ Run `run('examples/demo_compare_exchange_assumptions.m')` or pass the full [scri
 
 The two **`fixedECS`** values are the means of the generating priors, 1.6 µm²/ms axial and 0.525 µm²/ms radial for the default uniform distributions. For custom sampling functions, enter their known means in this setting. The defaults use 300 tissues, four independent noise draws per tissue and 6,000 independent training examples per regressor. Keep at least two repeats to measure precision. The script can use four local workers for NLLS with Parallel Computing Toolbox. Set `c.nllsWorkers=0` for serial execution.
 
-The output directory is `results/exchange_assumptions/snr_<SNR>/`. Each of the four assumption subdirectories retains both estimators’ ground-truth-versus-fit scatter figures, with a single paired draw per tissue. The ground truths vary along the horizontal axis even when the estimator fixes that parameter. This produces horizontal bands at the prescribed ECS values. The permeable fits include the varying τ truth and its fitted value. The bias and SD printed inside these scatter panels describe the displayed draw across tissues. **`bias_precision.png` and `bias_precision.csv` use all repeats**, including flagged NLLS fits. Bars show ±1 repeat SD, computed as the square root of the mean of the per-tissue sample variances. A signed bias of one repeat SD means that the average error is as large as a typical noise fluctuation.
+The output directory is `results/exchange_assumptions/snr_<SNR>/`. Open **`all_parameters.png`** for every ground-truth-versus-fit scatter panel. Its four rows group the fitting assumptions, with NLLS on the left and polynomial regression on the right. Each assumption subdirectory also contains `nlls_all_parameters.png` and `polynomial_all_parameters.png`, with two rows of parameters per figure. To redraw all of these from saved estimates, run the following from the repository root.
+
+```matlab
+addpath(pwd,'examples')
+outputDir = fullfile(pwd,'results','exchange_assumptions','snr_100');
+load(fullfile(outputDir,'comparison.mat'),'fits')
+tmixplots.plot_exchange_assumptions(fits,outputDir,1);
+```
+
+The default scatter plots show one paired noise draw per tissue. Pass `[]` in place of `1` to show every draw. The ground truths vary along the horizontal axis even when the estimator fixes that parameter. This produces horizontal bands at the prescribed ECS values. The permeable fits include the varying τ truth and its fitted value. The bias and SD printed inside these scatter panels describe the displayed errors across tissues. **`bias_precision.png` and `bias_precision.csv` use all repeats**, including flagged NLLS fits. Bars show ±1 repeat SD, computed as the square root of the mean of the per-tissue sample variances. A signed bias of one repeat SD means that the average error is as large as a typical noise fluctuation.
 
 The CSV gives signed bias, across-population error SD, within-tissue repeat SD, RMSE and nonconvergence counts. `biasOverRepeatSD` uses each fit's own precision. `biasShiftOverMatchedSD` measures the change in bias from the permeable, free-ECS fit in units of that estimator's matched repeat SD. Fixed parameters have zero repeat SD and an undefined own-SD ratio. Their RMSE still measures errors across tissues. The impermeable fits have no exchange-time estimate. `comparison.mat` contains per-trial truths, estimates, observations, exit flags and both regressor and fit configurations.
 

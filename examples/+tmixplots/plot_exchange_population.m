@@ -1,5 +1,7 @@
-function files = plot_exchange_population(population,outputDir,plotRep)
+function files = plot_exchange_population(population,outputDir,plotRep,combined)
 % Each column uses identical x/y limits across SNRs and both estimators.
+if nargin<3, plotRep = []; end
+if nargin<4, combined = false; end
 groups = {["fStick","fECS","fSphere","p2"], ["Dstick","DePar","DePerp","Dsoma","radius"]};
 groupNames = ["fractions_p2","diffusivities_radius"];
 titles = {["Stick fraction","ECS fraction","Sphere fraction","fODF p_2"], ...
@@ -15,7 +17,7 @@ if ismember("permeableStick",population.nlls.config.parts)
     if isscalar(population.nlls.config.prior.DePar), description = "permeable sticks, ECS and spheres"; end
 end
 show = true(height(population.nlls.trials),1);
-singleRep = nargin==3 && ~isempty(plotRep);
+singleRep = ~isempty(plotRep);
 if singleRep
     show = population.nlls.trials.rep==plotRep;
     assert(any(show),'The selected noise repetition is absent.');
@@ -26,6 +28,25 @@ if isscalar(spec.DePar) && isscalar(spec.DePerp)
 end
 methods = ["nlls","polynomial"]; methodTitles = ["NLLS","Polynomial regression"];
 snrs = unique(population.nlls.trials.snr);
+if combined
+    assert(isscalar(snrs),'The combined scatter figure takes one b0 SNR.');
+    % Keep the same panel positions for both stick models, with tau last.
+    radius = groups{2}=="radius";
+    groups = {[groups{1},groups{2}(radius),groups{2}(~radius)]};
+    titles = {[titles{1},titles{2}(radius),titles{2}(~radius)]};
+    groupNames = "all_parameters";
+    if ismember("permeableStick",population.nlls.config.parts)
+        stickLabel = "Permeable sticks";
+    else
+        stickLabel = "Impermeable sticks";
+    end
+    if isscalar(spec.DePar) && isscalar(spec.DePerp)
+        ecsLabel = sprintf('fixed ECS D (axial %g, radial %g µm²/ms)',spec.DePar,spec.DePerp);
+    else
+        ecsLabel = "free ECS diffusivities";
+    end
+    description = stickLabel+"   ·   "+ecsLabel+sprintf("   ·   b_0 SNR %g",snrs);
+end
 files = strings(0,1);
 for g = 1:numel(groups)
     params = groups{g};
@@ -42,10 +63,12 @@ for g = 1:numel(groups)
         result = population.(methods(m));
         for first = 1:4:numel(snrs)
             rows = snrs(first:min(first+3,end));
+            nRows = numel(rows); nCols = numel(params);
+            if combined, nRows = 2; nCols = 5; end
             fig = figure('Name',methodTitles(m)+" · "+groupNames(g),'NumberTitle','off', ...
-                'Color','white','Units','pixels','Position',[35 45 270*numel(params) 130+235*numel(rows)]);
+                'Color','white','Units','pixels','Position',[35 45 270*nCols 130+235*nRows]);
             fig.Theme = 'light';
-            layout = tiledlayout(fig,numel(rows),numel(params),'TileSpacing','compact','Padding','compact');
+            layout = tiledlayout(fig,nRows,nCols,'TileSpacing','compact','Padding','compact');
             title(layout,sprintf('%s   ·   %s',methodTitles(m),description), ...
                 'FontSize',15);
             if isscalar(population.exchangeTime)
@@ -54,6 +77,7 @@ for g = 1:numel(groups)
                 tauLabel = sprintf('Ground-truth τ uniform from %g to %g ms',population.exchangeTime);
             end
             caption = tauLabel+sprintf("   ·   %d shared tissues",result.config.nTissue);
+            if combined, caption = "Simulated exchanging sticks + ECS + spheres   ·   "+caption; end
             if singleRep
                 caption = caption+sprintf("   ·   noise draw %d of %d shown",plotRep,result.config.nRep);
             else
@@ -69,7 +93,7 @@ for g = 1:numel(groups)
                     x = [result.truth(use).(name)]'; y = [result.estimate(use).(name)]';
                     handles = drawPanel(ax,x,y,flagged,limits(col,:));
                     if row==1, title(ax,titles{g}(col),'FontSize',11); end
-                    if col==1, ylabel(ax,sprintf('SNR %g',rows(row))); end
+                    if col==1 && ~combined, ylabel(ax,sprintf('SNR %g',rows(row))); end
                     if row<numel(rows), ax.XTickLabel = []; end
                     if row==1 && col==1
                         if ~any(result.trials.flag(show)<=0), handles(end)=[]; end
@@ -78,6 +102,11 @@ for g = 1:numel(groups)
                         key.Layout.Tile = 'south';
                     end
                 end
+            end
+            if combined && ~ismember("tau",params)
+                ax = nexttile(layout); axis(ax,'off');
+                text(ax,.5,.5,{'Exchange time','Fit assumes zero exchange'},'Units','normalized', ...
+                    'HorizontalAlignment','center','Color',[.34 .34 .34],'FontSize',11);
             end
             stem = methods(m)+"_"+groupNames(g);
             if numel(snrs)>4, stem = stem+sprintf('_page_%02d',ceil(first/4)); end
