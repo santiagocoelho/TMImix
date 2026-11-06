@@ -1,6 +1,10 @@
 %% User settings
-% From the repository root: run('examples/demo_compare_estimators.m')
-repoRoot = fileparts(fileparts(mfilename('fullpath')));
+% The MATLAB Editor can run a temporary copy outside the checkout.
+roots = [string(fileparts(fileparts(mfilename('fullpath')))), string(fileparts(which('TMImix'))), ...
+    string(pwd), string(fileparts(pwd)), fullfile(string(getenv('HOME')),'Git','TMImix')];
+repoRoot = roots(find(roots~="" & isfile(fullfile(roots,'TMImix.m')) & ...
+    isfile(fullfile(roots,'examples','noise_config.m')),1));
+assert(~isempty(repoRoot),'Open the saved example in your TMImix checkout or run it by its full path.');
 addpath(repoRoot,fullfile(repoRoot,'examples'));
 
 % Edit these independently. Each field is a physical parameter name.
@@ -64,13 +68,13 @@ writetable(metrics,fullfile(outputDir,'metrics.csv'));
 %% Plot signed bias (estimate minus truth) and RMSE, in native units
 % Run this section again to redraw from the metrics table in the workspace.
 pdfPath = fullfile(outputDir,'bias_rmse_by_parameter.pdf');
-plot_noise_modes(metrics,modes,units,pdfPath,showFigures);
+tmixplots.plot_noise_modes(metrics,modes,units,pdfPath,showFigures);
 fprintf('Wrote %s and metrics.csv\n',pdfPath);
 
 %% Scatter plots of ground truth versus fitted values
 % Rerun this section with comparison in the workspace to reuse the same fits.
 scatterPath = fullfile(outputDir,'ground_truth_vs_fit.pdf');
-plot_noise_scatter(comparison,metrics,modes,units,scatterPath,showFigures);
+tmixplots.plot_noise_scatter(comparison,metrics,modes,units,scatterPath,showFigures);
 fprintf('Wrote %s\n',scatterPath);
 
 function label = constraintText(mode,fixed,units)

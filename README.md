@@ -4,6 +4,12 @@ TMImix is a MATLAB extension of the [SMI signal model](https://github.com/NYU-Di
 
 Start MATLAB in this directory and run `addpath(pwd,'examples')`. The forward model and regression use base MATLAB; NLLS uses `lsqnonlin` from Optimization Toolbox. Tested with MATLAB R2026a.
 
+## Fit exchanging tissue with impermeable sticks
+
+Run `run('examples/demo_exchange_mismatch.m')` from the repository root, or pass the full script path to `run` from any MATLAB folder. The [example](examples/demo_exchange_mismatch.m) generates noiseless, normalized S₀ and S₂ for one tissue with permeable sticks, ECS and impermeable spheres at τ = 10 ms. Both estimators fit those same signals with impermeable sticks, ECS and spheres. NLLS starts at the corresponding ground-truth parameters. The quadratic regressor trains on 2,400 independently sampled impermeable tissues.
+
+The script prints the truth and both estimates for every shared parameter, plus signal RMSE for S₀ and S₂. The figure in `results/exchange_mismatch/signal_fits.png` shows how each fit follows the signal across diffusion times at each b-value. Edit `truth`, the protocol, `bounds`, or `trainPrior` in the script. Set `truth.tau = Inf` to run the same comparison with impermeable ground truth.
+
 ## Run a noise experiment
 
 Choose the active compartments and supply one **[b, Delta, Ndirs]** row per shell. This example uses all six compartments, eight diffusion-weighted shells and six b=0 repetitions.
