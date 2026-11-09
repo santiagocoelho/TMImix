@@ -113,6 +113,7 @@ for g = 1:numel(groups)
                     if row==1
                         parameterTitle = titles{g}(col);
                         if isscalar(spec.(name)), parameterTitle = parameterTitle+" · fixed"; end
+                        if name=="tau" && isscalar(spec.tau), parameterTitle = "τ (ms) · fixed"; end
                         title(ax,parameterTitle,'FontSize',11);
                     end
                     if col==1 && ~combined, ylabel(ax,sprintf('SNR %g',rows(row))); end
