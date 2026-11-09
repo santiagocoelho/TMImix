@@ -5,6 +5,7 @@ classdef TMImix
         protocol
         parts
         exchange
+        ecs = "axial"
         steps
         mu
         weights
@@ -16,6 +17,7 @@ classdef TMImix
                 protocol (:,3) double {mustBeReal,mustBeFinite}
                 parts (1,:) string
                 opt.Exchange (1,1) string {mustBeMember(opt.Exchange,["finite","narrow"])} = "finite"
+                opt.ECS (1,1) string {mustBeMember(opt.ECS,["axial","isotropic"])} = "axial"
                 opt.Steps (1,1) double {mustBeInteger,mustBePositive} = 16
                 opt.Order (1,1) double {mustBeInteger,mustBeGreaterThanOrEqual(opt.Order,4)} = 48
             end
@@ -29,7 +31,7 @@ classdef TMImix
                 protocol(:,3)>=0 & protocol(:,3)<=protocol(:,2)), ...
                 'Expected b >= 0, Delta > 0 and 0 <= delta <= Delta.');
             obj.protocol=protocol; obj.parts=parts; obj.exchange=opt.Exchange;
-            obj.steps=opt.Steps;
+            obj.steps=opt.Steps; obj.ecs=opt.ECS;
             [~,ix]=ismember(parts,keys); obj.fractions=names(ix);
             % Gauss-Legendre rule on [0,1].
             j=1:opt.Order-1; v=j./sqrt(4*j.^2-1);
@@ -42,16 +44,21 @@ classdef TMImix
             p=struct;
             for k=obj.fractions, p.(k)=1/numel(obj.parts); end
             if isfield(p,'fStick'), p.Dstick=2; end
-            if isfield(p,'fECS'), p.DePar=1.5; p.DePerp=0.7; end
+            if isfield(p,'fECS')
+                if obj.ecs=="isotropic", p.De=1;
+                else, p.DePar=1.5; p.DePerp=0.7; end
+            end
             if isfield(p,'fPerm'), p.Dperm=2; p.tau=30; end
             if isfield(p,'fSphere'), p.radius=7; p.Dsoma=2; end
             if isfield(p,'fWater'), p.Dwater=3; end
-            if any(ismember(obj.parts,["stick","ecs","permeableStick"])), p.p2=0.6; end
+            oriented = any(ismember(obj.parts,["stick","permeableStick"])) || ...
+                (ismember("ecs",obj.parts) && obj.ecs=="axial");
+            if oriented, p.p2=0.6; end
         end
 
         function bounds = freeBounds(obj)
             % Editable simulation/fit ranges for every active parameter.
-            ranges = struct('Dstick',[0.5 3], 'DePar',[0.3 2.5], 'DePerp',[0.1 1.5], ...
+            ranges = struct('Dstick',[0.5 3], 'De',[0.1 2.5], 'DePar',[0.3 2.5], 'DePerp',[0.1 1.5], ...
                 'Dperm',[0.5 3], 'tau',[5 100], 'radius',[3 12], 'Dsoma',[0.5 3], ...
                 'Dwater',[2 3.5], 'p2',[0 1]);
             bounds = obj.defaults();
@@ -151,7 +158,8 @@ classdef TMImix
             b=obj.protocol(:,1); K=zeros(numel(b),numel(u2));
             if isfield(p,'fStick'), K=K+p.fStick*exp(-b*(p.Dstick*u2)); end
             if isfield(p,'fECS')
-                De=p.DePerp+(p.DePar-p.DePerp)*u2;
+                if obj.ecs=="isotropic", De=p.De+zeros(size(u2));
+                else, De=p.DePerp+(p.DePar-p.DePerp)*u2; end
                 if isfield(p,'fPerm') && p.fPerm>0 && p.fECS>0
                     total=p.fPerm+p.fECS;
                     K=K+total*tmix.exchange(obj.protocol,p.Dperm*u2,De, ...

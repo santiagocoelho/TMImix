@@ -1,7 +1,9 @@
-function c = noise_config(parts,protocol)
+function c = noise_config(parts,protocol,ecs)
 % Choose compartments and supply one [b, Delta, Ndirs] row per shell.
 % c.delta is the PGSE pulse duration (ms), separate from this table.
 % A table with named b, Delta, Ndirs columns is also accepted.
+% Pass "isotropic" as the third argument to fit a single ECS diffusivity De.
+if nargin < 3, ecs = "axial"; end
 if nargin < 1
     parts = ["permeableStick","ecs","sphere"];
 end
@@ -13,8 +15,9 @@ c.parts = reshape(string(parts),1,[]);
 c.protocol = protocol;
 c.delta = 5;
 c.exchange = "finite";
+c.ecs = ecs;
 % Only the selected compartments determine the parameter names and bounds.
-schema = TMImix([1 20 5],c.parts);
+schema = TMImix([1 20 5],c.parts,ECS=ecs);
 c.prior = schema.freeBounds(); % optimizer bounds; scalar fields are fixed
 c.testPrior = struct();        % override sampling laws for test tissue
 c.trainPrior = struct();       % independent laws for polynomial training

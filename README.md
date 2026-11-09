@@ -55,6 +55,35 @@ The default scatter plots show one paired noise draw per tissue. Pass `[]` in pl
 
 The CSV gives signed bias, across-population error SD, within-tissue repeat SD, RMSE and nonconvergence counts. `biasOverRepeatSD` uses each fit's own precision. `biasShiftOverMatchedSD` measures the change in bias from the permeable, free-ECS fit in units of that estimator's matched repeat SD. Fixed parameters have zero repeat SD and an undefined own-SD ratio. Their RMSE still measures errors across tissues. The impermeable fits have no exchange-time estimate. `comparison.mat` contains per-trial truths, estimates, observations, exit flags and both regressor and fit configurations.
 
+### Compare free, fixed and very slow exchange with isotropic ECS
+
+Run [demo_compare_sandix_exchange.m](examples/demo_compare_sandix_exchange.m) to simulate permeable sticks exchanging with Gaussian isotropic ECS plus impermeable spheres. Each tissue has one ECS diffusivity, `De`. The default acquisition uses b = [0, 1, 2, 5, 10, 15] ms/µm², Δ = 10:10:80 ms, δ = 6 ms, 30 directions per diffusion-weighted shell and one b₀ image per Δ. Per-image b₀ SNR is 50. Independent Gaussian noise is added before pooled b₀ normalization and S₀/S₂ extraction. Set `c.noise="rician"` for magnitude noise.
+
+The same 300 tissues and four noise draws are fitted by both NLLS and quadratic polynomial regression under three assumptions.
+
+| Fit | Exchange time | Independent free parameters |
+|---|---|---|
+| SANDIX-like | Estimated | 8 |
+| SANDIX-fixed | Fixed at 10 ms | 7 |
+| SANDI-like | Fixed at 1,000,000 ms | 7 |
+
+The nine displayed parameters are three fractions (which sum to one), stick diffusivity, ECS diffusivity, sphere radius, intrasomal diffusivity, fODF p₂ and exchange time. All ground-truth parameters vary across tissues in every fit. Ground-truth τ is uniform from 5 to 30 ms. The default free-τ fit bounds and training distribution also span 5 to 30 ms. Edit `testTau`, `c.prior.tau`, and `c.trainPrior.tau` independently. The default ECS diffusivity is uniform from 0.5 to 1.5 µm²/ms. Other distribution settings are in `c.testPrior` and `c.trainPrior`.
+
+Set **`fixedTau`** to the list of assumed values to compare. For example, `fixedTau = [5 10 15 20 25 30 1e6]` runs the free-τ baseline and each listed fixed-τ fit on identical noisy observations. Each fixed fit imposes its τ on the polynomial training population while the test population retains its varying τ. NLLS starts at each tissue's ground truth for all free parameters. It evaluates candidate S₀/S₂ through the same finite-direction projection as the simulated data, using the known simulated fibre axis. The fixed value 1e6 ms is evaluated by the finite-pulse exchange kernel and approximates impermeable sticks. τ follows TMImix's inverse-sum-of-rates convention described below.
+
+Results go to `results/sandix_exchange/snr_<SNR>/`. **`all_parameters.png`** contains all GT-versus-fit scatter panels, with one assumption per block row and NLLS and polynomial regression in its two columns. Each assumption subdirectory contains a 3×3 figure per estimator. The fixed-1e6-ms τ scatter uses separate x and y ranges to show both varying truths and the prescribed fitted value. **`bias_precision.png`**, **`rmse.png`**, and **`repeat_precision.png`** compare signed bias, total error and within-tissue noise SD across all repeats. Fixed outputs have zero repeat variance and can have large errors across tissues. The CSV includes `rmseRatio` and `precisionRatio`, each relative to that estimator's free-τ baseline. A ratio below one indicates a reduction. Flagged NLLS exits are included in the metrics and marked in red on the scatter plots.
+
+```matlab
+% Redraw saved estimates from the repository root.
+addpath(pwd,'examples')
+outputDir = fullfile(pwd,'results','sandix_exchange','snr_50');
+load(fullfile(outputDir,'comparison.mat'),'fits','metrics')
+tmixplots.plot_exchange_assumptions(fits,outputDir,1);
+tmixplots.plot_bias_precision(metrics,outputDir);
+tmixplots.plot_bias_precision(metrics,outputDir,"RMSE");
+tmixplots.plot_bias_precision(metrics,outputDir,"withinTissueSD");
+```
+
 ## Run a noise experiment
 
 Choose the active compartments and supply one **[b, Delta, Ndirs]** row per shell. This example uses all six compartments, eight diffusion-weighted shells and six b=0 repetitions.
@@ -146,6 +175,8 @@ K = m.kernel(p,linspace(0,1,101));  % full angular response per shell
 | `water` | `fWater, Dwater` | Isotropic free diffusion (default 3 µm²/ms) |
 
 Diffusivities are in µm²/ms; radius is in µm; exchange time is in ms. Fractions are normalized b=0 signal fractions. For angular cosine μ, the stick diffusivity is D∥μ² and the ECS diffusivity is D⊥ + (D∥ − D⊥)μ². ECS contributes once: either as a Gaussian or as part of the exchanging pair. Other pools do not exchange. Choose `["stick","ecs","water"]` for the LTE SMI model, `["stick","ecs","sphere"]` with isotropic ECS for SANDI-like simulations, or `["permeableStick","ecs"]` for exchange alone.
+
+For Gaussian isotropic ECS, use `TMImix(protocol,parts,ECS="isotropic")`. This selects a single `De` parameter for the ECS response, including its role in exchange. In the noise examples, `noise_config(parts,protocol,"isotropic")` creates the corresponding fit schema. The default `ECS="axial"` uses separate `DePar` and `DePerp`.
 
 **Exchange timing.** With η = fPerm/(fPerm + fECS), the stick-to-ECS rate is (1−η)/τ and the reverse rate is η/τ. Thus τ is the inverse **sum** of rates, not the stick residence time. `tau=Inf` disables exchange. The default `Exchange="finite"` propagates the two-site Kärger equations along the actual rectangular PGSE q(t)² history. The plateau is exact; each ramp uses 16 subintervals with exact mean q² and a matrix exponential. Increase `Steps` to check convergence for a demanding protocol. `Exchange="narrow"` uses a constant q² and effective time Δ−δ/3; δ=0 gives the strict narrow-pulse limit. The sphere uses the timing provided, independently of the exchange option, with 64 reflecting-sphere modes and an explicit δ=0 limit.
 

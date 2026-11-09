@@ -2,11 +2,17 @@ function files = plot_exchange_population(population,outputDir,plotRep,combined)
 % Each column uses identical x/y limits across SNRs and both estimators.
 if nargin<3, plotRep = []; end
 if nargin<4, combined = false; end
+spec = population.nlls.config.prior;
+isotropic = isfield(spec,'De');
 groups = {["fStick","fECS","fSphere","p2"], ["Dstick","DePar","DePerp","Dsoma","radius"]};
 groupNames = ["fractions_p2","diffusivities_radius"];
 titles = {["Stick fraction","ECS fraction","Sphere fraction","fODF p_2"], ...
     ["Stick D (µm²/ms)","ECS axial D (µm²/ms)","ECS radial D (µm²/ms)","Soma D (µm²/ms)","Soma radius (µm)"]};
 description = "exchanging tissue fitted with impermeable sticks";
+if isotropic
+    groups{2} = ["Dstick","De","Dsoma","radius"];
+    titles{2} = ["Stick D (µm²/ms)","ECS D (µm²/ms)","Soma D (µm²/ms)","Soma radius (µm)"];
+end
 if ismember("permeableStick",population.nlls.config.parts)
     groups{1}(1) = "fPerm";
     groups{2}(1) = "Dperm";
@@ -14,7 +20,7 @@ if ismember("permeableStick",population.nlls.config.parts)
     titles{2}(end+1) = "Exchange time (ms)";
     groupNames(2) = "diffusivities_radius_tau";
     description = "matched permeable sticks, ECS and spheres";
-    if isscalar(population.nlls.config.prior.DePar), description = "permeable sticks, ECS and spheres"; end
+    if ~isotropic && isscalar(spec.DePar), description = "permeable sticks, ECS and spheres"; end
 end
 show = true(height(population.nlls.trials),1);
 singleRep = ~isempty(plotRep);
@@ -22,8 +28,7 @@ if singleRep
     show = population.nlls.trials.rep==plotRep;
     assert(any(show),'The selected noise repetition is absent.');
 end
-spec = population.nlls.config.prior;
-if isscalar(spec.DePar) && isscalar(spec.DePerp)
+if ~isotropic && isscalar(spec.DePar) && isscalar(spec.DePerp)
     description = description+sprintf('   ·   ECS fixed at (%g, %g) µm²/ms',spec.DePar,spec.DePerp);
 end
 methods = ["nlls","polynomial"]; methodTitles = ["NLLS","Polynomial regression"];
@@ -40,12 +45,19 @@ if combined
     else
         stickLabel = "Impermeable sticks";
     end
-    if isscalar(spec.DePar) && isscalar(spec.DePerp)
+    if isotropic
+        ecsLabel = "isotropic ECS";
+    elseif isscalar(spec.DePar) && isscalar(spec.DePerp)
         ecsLabel = sprintf('fixed ECS D (axial %g, radial %g µm²/ms)',spec.DePar,spec.DePerp);
     else
         ecsLabel = "free ECS diffusivities";
     end
     description = stickLabel+"   ·   "+ecsLabel+sprintf("   ·   b_0 SNR %g",snrs);
+end
+if isfield(population,'label')
+    description = population.label;
+    if isotropic, description = description+"   ·   isotropic ECS"; end
+    description = description+sprintf("   ·   b_0 SNR %g",snrs(1));
 end
 files = strings(0,1);
 for g = 1:numel(groups)
@@ -65,6 +77,7 @@ for g = 1:numel(groups)
             rows = snrs(first:min(first+3,end));
             nRows = numel(rows); nCols = numel(params);
             if combined, nRows = 2; nCols = 5; end
+            if combined && isotropic, nRows = 3; nCols = 3; end
             fig = figure('Name',methodTitles(m)+" · "+groupNames(g),'NumberTitle','off', ...
                 'Color','white','Units','pixels','Position',[35 45 270*nCols 130+235*nRows]);
             fig.Theme = 'light';
@@ -77,7 +90,7 @@ for g = 1:numel(groups)
                 tauLabel = sprintf('Ground-truth τ uniform from %g to %g ms',population.exchangeTime);
             end
             caption = tauLabel+sprintf("   ·   %d shared tissues",result.config.nTissue);
-            if combined, caption = "Simulated exchanging sticks + ECS + spheres   ·   "+caption; end
+            if combined && ~isotropic, caption = "Simulated exchanging sticks + ECS + spheres   ·   "+caption; end
             if singleRep
                 caption = caption+sprintf("   ·   noise draw %d of %d shown",plotRep,result.config.nRep);
             else
@@ -91,7 +104,12 @@ for g = 1:numel(groups)
                 for col = 1:numel(params)
                     ax = nexttile(layout); name = params(col);
                     x = [result.truth(use).(name)]'; y = [result.estimate(use).(name)]';
-                    handles = drawPanel(ax,x,y,flagged,limits(col,:));
+                    xlimits = limits(col,:);
+                    if name=="tau" && isscalar(spec.tau) && spec.tau>100*max(x)
+                        pad = .04*max(1,range(x));
+                        xlimits = [min(x)-pad,max(x)+pad];
+                    end
+                    handles = drawPanel(ax,x,y,flagged,limits(col,:),xlimits);
                     if row==1, title(ax,titles{g}(col),'FontSize',11); end
                     if col==1 && ~combined, ylabel(ax,sprintf('SNR %g',rows(row))); end
                     if row<numel(rows), ax.XTickLabel = []; end
@@ -118,7 +136,7 @@ for g = 1:numel(groups)
 end
 end
 
-function handles = drawPanel(ax,x,y,flagged,lim)
+function handles = drawPanel(ax,x,y,flagged,lim,xlimits)
 hold(ax,'on');
 % Quantile bins give comparable support across a nonuniform tissue prior.
 edges = unique(quantile(x,linspace(0,1,min(10,max(1,floor(numel(x)/8)))+1)));
@@ -138,15 +156,17 @@ else
 end
 band.DisplayName = 'Binned mean ± 1 error SD';
 dots = scatter(ax,x,y,9,[.17 .36 .50],'filled','MarkerFaceAlpha',.40,'DisplayName','Individual fits');
-identity = plot(ax,lim,lim,'--','Color',[.28 .28 .28],'DisplayName','Identity');
+identity = plot(ax,xlimits,xlimits,'--','Color',[.28 .28 .28],'DisplayName','Identity');
 trend = plot(ax,xbar,ybar,'-o','Color',[.56 .22 .04],'MarkerFaceColor',[.56 .22 .04], ...
     'LineWidth',1.3,'MarkerSize',3,'DisplayName','Binned mean');
 % A NaN marker preserves the legend handle when this SNR has no flagged exits.
 failed = plot(ax,[NaN;x(flagged)],[NaN;y(flagged)],'rx', ...
     'LineWidth',1,'MarkerSize',5,'DisplayName','Flagged NLLS exit');
-text(ax,.04,.96,sprintf('Bias %+.3g   SD %.3g',mean(err),std(err)), ...
-    'Units','normalized','VerticalAlignment','top','FontSize',8,'BackgroundColor','white','Margin',1);
-axis(ax,'square'); xlim(ax,lim); ylim(ax,lim);
+textY=.96; alignment='top';
+if range(y)==0 && y(1)>mean(lim), textY=.08; alignment='bottom'; end
+text(ax,.04,textY,sprintf('Bias %+.3g   SD %.3g',mean(err),std(err)), ...
+    'Units','normalized','VerticalAlignment',alignment,'FontSize',8,'BackgroundColor','white','Margin',1);
+axis(ax,'square'); xlim(ax,xlimits); ylim(ax,lim);
 ax.XGrid='on'; ax.YGrid='on'; ax.GridAlpha=.12; ax.Box='on'; ax.FontSize=9;
 handles = [dots trend band identity failed];
 end

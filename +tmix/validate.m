@@ -10,7 +10,7 @@ for k=string(fieldnames(p))'
         '%s must be a scalar or a finite increasing fit interval.',k);
     if isFrac || k=="p2"
         assert(all(v>=0 & v<=1),'%s must be in [0,1].',k);
-    elseif k=="DePerp" || k=="DePar"
+    elseif ismember(k,["De","DePerp","DePar"])
         assert(all(v>=0),'%s must be nonnegative.',k);
     else
         assert(all(v>0),'%s must be positive.',k);

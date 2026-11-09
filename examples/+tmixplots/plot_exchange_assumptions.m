@@ -1,8 +1,8 @@
 function overviewFile = plot_exchange_assumptions(fits,outputDir,plotRep)
-% One overview of the paired fits, plus a two-row PNG per estimator and assumption.
+% One overview of the paired fits, plus a PNG per estimator and assumption.
 % Pass [] for plotRep to display every noise draw. The default shows draw 1.
 if nargin<3, plotRep = 1; end
-cases = ["permeable_free","impermeable_free","permeable_fixed_ECS","impermeable_fixed_ECS"];
+cases = string(fieldnames(fits))';
 tiles = cell(numel(cases),2); % columns are NLLS and polynomial regression
 for k = 1:numel(cases)
     subdir = fullfile(outputDir,cases(k));

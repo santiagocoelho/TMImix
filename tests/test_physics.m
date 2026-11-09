@@ -29,6 +29,24 @@ verifyEqual(t,tmix.sphere([2 20 5],.05,2),1,'AbsTol',1e-6);
 verifyGreaterThan(t,tmix.sphere([2 20 5],100,2),exp(-4));
 end
 
+function testIsotropicECS(t)
+q=[0 10 6;1 20 6;5 40 6;15 80 6]; u=[0 .3 .8 1];
+parts=["permeableStick","ecs","sphere"];
+m=TMImix(q,parts,ECS="isotropic"); p=m.defaults(); p.De=1.2; p.tau=12;
+a=TMImix(q,parts); expanded=rmfield(p,'De');
+expanded.DePar=p.De; expanded.DePerp=p.De;
+verifyEqual(t,m.kernel(p,u),a.kernel(expanded,u),'AbsTol',1e-13);
+verifyEqual(t,m.invariants(p),a.invariants(expanded),'AbsTol',1e-13);
+verifyEqual(t,m.fitPlan(m.freeBounds()).dimension,8);
+% A single isotropic ECS pool has just one diffusion parameter.
+ball=TMImix(q,"ecs",ECS="isotropic"); b=ball.defaults(); b.De=1.2;
+verifyEqual(t,sort(fieldnames(b)),{'De';'fECS'});
+verifyEqual(t,ball.invariants(b),[exp(-q(:,1)*b.De),zeros(4,1)],'AbsTol',1e-13);
+% The specified 1e6 ms assumption approaches the exact impermeable limit.
+p.tau=1e6; finite=m.kernel(p,u); p.tau=Inf;
+verifyEqual(t,finite,m.kernel(p,u),'AbsTol',1e-4);
+end
+
 function testExchangeAgainstODE(t)
 q=[3 28 9]; m=TMImix(q,["ecs","permeableStick"],Steps=32);
 p=m.defaults(); p.fPerm=.37; p.fECS=.63; p.tau=13;

@@ -117,7 +117,8 @@ for a=reshape(out.config.snr,1,[])
         e=p-g; e(isinf(g)&g==p)=0; % fixed tau=Inf (no exchange)
         within=NaN;
         if out.config.nRep>1
-            v=arrayfun(@(i) var(e(ids==i)),unique(ids)); within=sqrt(mean(v));
+            % Center on one repeat first so large fixed errors have exact zero variance.
+            v=arrayfun(@(i) var(e(ids==i)-e(find(ids==i,1))),unique(ids)); within=sqrt(mean(v));
         end
         rows(end+1,:)={a,k,numel(e),mean(e),std(e),within,sqrt(mean(e.^2)),sum(t.flag(ix)<=0)}; %#ok<AGROW>
     end

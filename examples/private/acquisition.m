@@ -26,7 +26,9 @@ else
     unspecified = rows(:,1)==0 & (rows(:,2)==0 | pulse>rows(:,2));
     timing(unspecified,:) = repmat([0 1 0],nnz(unspecified),1);
     pulse(unspecified) = 0;
-    m = TMImix(timing,c.parts,Exchange=c.exchange);
+    ecs = "axial";
+    if isfield(c,'ecs'), ecs = c.ecs; end
+    m = TMImix(timing,c.parts,Exchange=c.exchange,ECS=ecs);
 end
 counts = rows(:,3);
 validateattributes(counts,{'numeric'},{'finite','integer','positive'});
@@ -58,7 +60,7 @@ for n = unique(counts(~baseline))'
     if numel(shells)==size(rows,1)
         g.model = m;
     else
-        g.model = TMImix(timing(shells,:),m.parts,Exchange=m.exchange, ...
+        g.model = TMImix(timing(shells,:),m.parts,Exchange=m.exchange,ECS=m.ecs, ...
             Steps=m.steps,Order=numel(m.mu));
     end
     acq.groups(end+1) = g;
