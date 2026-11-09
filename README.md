@@ -57,19 +57,22 @@ The CSV gives signed bias, across-population error SD, within-tissue repeat SD, 
 
 ### Compare free, fixed and very slow exchange with isotropic ECS
 
-Run [demo_compare_sandix_exchange.m](examples/demo_compare_sandix_exchange.m) to simulate permeable sticks exchanging with Gaussian isotropic ECS plus impermeable spheres. Each tissue has one ECS diffusivity, `De`. The default acquisition uses b = [0, 1, 2, 5, 10, 15] ms/µm², Δ = 10:10:80 ms, δ = 6 ms, 30 directions per diffusion-weighted shell and one b₀ image per Δ. Per-image b₀ SNR is 50. Independent Gaussian noise is added before pooled b₀ normalization and S₀/S₂ extraction. Set `c.noise="rician"` for magnitude noise.
+Run [demo_compare_sandix_exchange.m](examples/demo_compare_sandix_exchange.m) to simulate permeable sticks exchanging with Gaussian isotropic ECS plus impermeable spheres. Each tissue has one ECS diffusivity, `De`. The default acquisition uses b = [0, 1, 2, 5, 10, 15] ms/µm², Δ = 10:10:80 ms, δ = 6 ms, 30 directions per diffusion-weighted shell and one b₀ image per Δ. **`targetSNR = [50 1e6]`** runs both per-image b₀ SNRs. Enter a scalar to run one SNR. Each SNR uses the same seeded tissues, orientations and standardized directional noise draws. Independent Gaussian noise is added before pooled b₀ normalization and S₀/S₂ extraction. Set `c.noise="rician"` for magnitude noise.
 
-The same 300 tissues and four noise draws are fitted by both NLLS and quadratic polynomial regression under three assumptions.
+The same 300 tissues and four noise draws are fitted by both NLLS and quadratic polynomial regression under four assumptions.
 
-| Fit | Exchange time | Independent free parameters |
-|---|---|---|
-| SANDIX-like | Estimated | 7 |
-| SANDIX-fixed | Fixed at 10 ms | 6 |
-| SANDI-like | Fixed at 1,000,000 ms | 6 |
+| Fit | Exchange time | ECS diffusivity | Independent free parameters |
+|---|---|---|---|
+| SANDIX-like | Estimated | Estimated | 7 |
+| SANDIX-fixed | Fixed at 10 ms | Estimated | 6 |
+| SANDI-like | Fixed at 1,000,000 ms | Estimated | 6 |
+| Fixed ECS | Estimated | Fixed at 1 µm²/ms | 6 |
 
 The nine displayed parameters are three fractions (which sum to one), stick diffusivity, ECS diffusivity, sphere radius, intrasomal diffusivity, fODF p₂ and exchange time. **Intrasomal diffusivity is fixed at 2 µm²/ms in the simulated tissues, polynomial training and every fit.** Every other ground-truth parameter varies across tissues. **fODF p₂ is uniform from 0.1 to 0.5**, with the same range used for training and fit bounds. The top-level `somaD` and `p2Range` settings control these choices. Ground-truth τ is uniform from 5 to 30 ms. The default free-τ fit bounds and training distribution also span 5 to 30 ms. Edit `testTau`, `c.prior.tau`, and `c.trainPrior.tau` independently. The default ECS diffusivity is uniform from 0.5 to 1.5 µm²/ms. Other distribution settings are in `c.testPrior` and `c.trainPrior`.
 
 Set **`fixedTau`** to the list of assumed values to compare. For example, `fixedTau = [5 10 15 20 25 30 1e6]` runs the free-τ baseline and each listed fixed-τ fit on identical noisy observations. Each fixed fit imposes its τ on the polynomial training population while the test population retains its varying τ. NLLS starts at each tissue's ground truth for all free parameters. It evaluates candidate S₀/S₂ through the same finite-direction projection as the simulated data, using the known simulated fibre axis. The fixed value 1e6 ms is evaluated by the finite-pulse exchange kernel and approximates impermeable sticks. τ follows TMImix's inverse-sum-of-rates convention described below.
+
+**`fixedECS = 1`** adds the fourth scenario, fixing ECS diffusivity in both estimators and polynomial training while estimating τ. Test tissues retain their varying ECS diffusivity and exchange time. Set `fixedECS = []` to omit this scenario. The comparison function's optional fourth argument accepts this value, so existing three-argument calls still run the free-τ and fixed-τ cases.
 
 Results go to `results/sandix_exchange_fixed_soma/snr_<SNR>/`. **`all_parameters.png`** contains all GT-versus-fit scatter panels, with one assumption per block row and NLLS and polynomial regression in its two columns. Each assumption subdirectory contains a 3×3 figure per estimator. Fixed parameters are labeled in the panels. The fixed-1e6-ms τ scatter uses separate x and y ranges to show both varying truths and the prescribed fitted value. **`bias_precision.png`**, **`rmse.png`**, and **`repeat_precision.png`** compare signed bias, total error and within-tissue noise SD across all repeats. Fixed outputs have zero repeat variance and can have large errors across tissues. The CSV includes `rmseRatio` and `precisionRatio`, each relative to that estimator's free-τ baseline. A ratio below one indicates a reduction. Ratios with a zero baseline error or SD, including the fixed soma diffusivity, are reported as NaN. Flagged NLLS exits are included in the metrics and marked in red on the scatter plots.
 

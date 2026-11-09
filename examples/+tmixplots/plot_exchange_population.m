@@ -82,8 +82,9 @@ for g = 1:numel(groups)
                 'Color','white','Units','pixels','Position',[35 45 270*nCols 130+235*nRows]);
             fig.Theme = 'light';
             layout = tiledlayout(fig,nRows,nCols,'TileSpacing','compact','Padding','compact');
-            title(layout,sprintf('%s   ·   %s',methodTitles(m),description), ...
-                'FontSize',15);
+            figureTitle = sprintf('%s   ·   %s',methodTitles(m),description);
+            if combined && isotropic, figureTitle = [methodTitles(m);description]; end
+            title(layout,figureTitle,'FontSize',15);
             if isscalar(population.exchangeTime)
                 tauLabel = sprintf('Ground-truth τ = %g ms',population.exchangeTime);
             else

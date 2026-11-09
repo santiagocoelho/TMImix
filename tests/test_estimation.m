@@ -295,12 +295,13 @@ c.delta=6; c.mode="free"; c.snr=50; c.nTissue=3; c.nRep=3; c.nTrain=30; c.degree
 c.prior.tau=[5 30]; c.prior.Dsoma=2; c.prior.p2=[.1 .5];
 c.testPrior=struct('De',[.5 1.5],'Dsoma',2,'p2',[.1 .5]);
 c.trainPrior=c.testPrior; c.trainPrior.tau=[5 30];
-[fits,M]=compare_sandix_exchange(c,[5 30],[10 20 1e6]);
-ref=fits.sandix_free; verifyEqual(t,height(M),72);
+[fits,M]=compare_sandix_exchange(c,[5 30],[10 20 1e6],1);
+ref=fits.sandix_free; verifyEqual(t,height(M),90);
 for name=string(fieldnames(fits))'
     r=fits.(name); p=r.nlls.config.prior; model=TMImix([1 20 6],c.parts,ECS="isotropic");
     fixed=isscalar(p.tau);
-    verifyEqual(t,model.fitPlan(p).dimension,7-double(fixed));
+    fixedECS=isscalar(p.De);
+    verifyEqual(t,model.fitPlan(p).dimension,7-double(fixed)-double(fixedECS));
     verifyEqual(t,r.forwardTruth,ref.forwardTruth);
     verifyEqual(t,r.nlls.observed,ref.nlls.observed);
     verifyEqual(t,r.polynomial.observed,r.nlls.observed);
@@ -318,6 +319,16 @@ for name=string(fieldnames(fits))'
     dw=r.nlls.protocol.b>0; verifyEqual(t,unique(r.nlls.protocol.Ndirs(dw)),30);
     verifyEqual(t,unique(r.nlls.protocol.L(dw)),6);
     startTruth=r.nlls.truth;
+    if fixedECS
+        [startTruth.De]=deal(p.De);
+        verifyEqual(t,p.De,1);
+        verifyEqual(t,[r.nlls.estimate.De],ones(1,9));
+        verifyEqual(t,[r.polynomial.estimate.De],ones(1,9));
+        verifyEqual(t,[r.polynomial.trainingTruth.De],ones(1,c.nTrain));
+        verifyEqual(t,[r.nlls.start.tau],[r.forwardTruth.tau],'AbsTol',1e-12);
+        verifyGreaterThan(t,range([r.polynomial.trainingTruth.tau]),0);
+        verifyFalse(t,isscalar(p.tau));
+    end
     if fixed
         [startTruth.tau]=deal(p.tau);
         verifyEqual(t,[r.polynomial.trainingTruth.tau],repmat(p.tau,1,c.nTrain));

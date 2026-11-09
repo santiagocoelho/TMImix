@@ -1,5 +1,7 @@
-function [fits,metrics] = compare_sandix_exchange(c,testTau,fixedTau)
+function [fits,metrics] = compare_sandix_exchange(c,testTau,fixedTau,fixedECS)
 % Fit the same isotropic-ECS measurements with free or prescribed exchange.
+% An optional ECS diffusivity adds a fit with fixed De and free exchange.
+if nargin<4, fixedECS = []; end
 validateattributes(c.snr,{'numeric'},{'scalar','real','positive','nonnan'});
 validateattributes(c.nRep,{'numeric'},{'scalar','integer','>=',2});
 validateattributes(testTau,{'numeric'},{'row','numel',2,'finite','positive','increasing'});
@@ -10,14 +12,22 @@ assert(isequal(c.parts,["permeableStick","ecs","sphere"]) && ...
 assert(numel(c.prior.tau)==2,'The baseline must estimate exchange time within a range.');
 assert(testTau(1)>=c.prior.tau(1) && testTau(2)<=c.prior.tau(2), ...
     'The fit bounds must include every sampled exchange time.');
+if ~isempty(fixedECS)
+    validateattributes(fixedECS,{'numeric'},{'scalar','real','finite','nonnegative'});
+    assert(numel(c.prior.De)==2,'The reference fit must estimate ECS diffusivity.');
+end
 data = sample_exchange_data(c,testTau);
 fits = struct();
 caseNames = ["sandix_free",string(matlab.lang.makeValidName(compose('tau_fixed_%.12g_ms',fixedTau)))];
+if ~isempty(fixedECS), caseNames(end+1) = "ecs_fixed"; end
 assert(numel(unique(caseNames))==numel(caseNames),'Fixed exchange times need distinct case names.');
 for k = 1:numel(caseNames)
     cfg = c;
     label = "SANDIX-like · free τ";
-    if k>1
+    if caseNames(k)=="ecs_fixed"
+        cfg.prior.De = fixedECS;
+        label = sprintf('Fixed ECS D = %g µm²/ms · free τ',fixedECS);
+    elseif k>1
         cfg.prior.tau = fixedTau(k-1);
         label = sprintf('SANDIX-fixed · τ = %g ms',cfg.prior.tau);
         if cfg.prior.tau==1e6, label = "SANDI-like · τ = 10^6 ms"; end
