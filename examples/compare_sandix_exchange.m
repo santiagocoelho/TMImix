@@ -6,8 +6,8 @@ validateattributes(testTau,{'numeric'},{'row','numel',2,'finite','positive','inc
 validateattributes(fixedTau,{'numeric'},{'row','nonempty','finite','positive'});
 assert(numel(unique(fixedTau))==numel(fixedTau),'List each fixed exchange time once.');
 assert(isequal(c.parts,["permeableStick","ecs","sphere"]) && ...
-    c.ecs=="isotropic" && c.mode=="free",'Use isotropic ECS and an all-free baseline.');
-assert(all(structfun(@(v) numel(v)==2,c.prior)),'Baseline fit parameters must all be free.');
+    c.ecs=="isotropic" && c.mode=="free",'Use isotropic ECS and the free-τ baseline.');
+assert(numel(c.prior.tau)==2,'The baseline must estimate exchange time within a range.');
 assert(testTau(1)>=c.prior.tau(1) && testTau(2)<=c.prior.tau(2), ...
     'The fit bounds must include every sampled exchange time.');
 data = sample_exchange_data(c,testTau);

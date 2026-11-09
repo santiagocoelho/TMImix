@@ -9,6 +9,8 @@ addpath(repoRoot,fullfile(repoRoot,'examples'));
 targetSNR = 50;                       % b0 signal / per-image noise SD
 testTau = [5 30];                     % uniform exchange times in ms
 fixedTau = [10 1e6];                  % add values, e.g. [5 10 15 20 25 30 1e6]
+somaD = 2;                           % fixed in test tissues, training and estimation
+p2Range = [0.1 0.5];                 % test/training distribution and fit bounds
 bValues = [0 1 2 5 10 15];           % ms/µm²
 diffusionTimes = 10:10:80;            % Δ, ms
 pulseWidth = 6;                      % δ, ms
@@ -25,10 +27,12 @@ c.degree = 2; c.seed = 712;
 % Fractions follow a joint Dirichlet law in [stick, ECS, sphere] order.
 % Other fields accept uniform [lo hi] intervals, constants, or @() draws.
 c.testPrior = struct('fractionAlpha',[4 4 2],'Dperm',[1 2.8],'De',[0.5 1.5], ...
-    'radius',[5 10],'Dsoma',[1 2.5],'p2',[0.3 0.9]);
+    'radius',[5 10],'Dsoma',somaD,'p2',p2Range);
 c.trainPrior = c.testPrior;          % edit polynomial training laws independently
 c.trainPrior.tau = testTau;
 c.prior.tau = testTau;               % free-τ fit bounds, editable independently
+c.prior.Dsoma = somaD;
+c.prior.p2 = p2Range;
 % tau = 1/(k_stick_to_ECS + k_ECS_to_stick), following TMImix's convention.
 c.nllsWorkers = 4;                   % zero selects serial NLLS
 if c.nllsWorkers>0 && license('test','Distrib_Computing_Toolbox') && ~isempty(ver('parallel'))
@@ -38,7 +42,7 @@ if c.nllsWorkers>0 && license('test','Distrib_Computing_Toolbox') && ~isempty(ve
 else
     c.nllsWorkers = 0;
 end
-outputDir = fullfile(repoRoot,'results','sandix_exchange',sprintf('snr_%g',targetSNR));
+outputDir = fullfile(repoRoot,'results','sandix_exchange_fixed_soma',sprintf('snr_%g',targetSNR));
 if ~isfolder(outputDir), mkdir(outputDir); end
 
 %% One set of exchanging tissues and noise draws for every estimator and fit

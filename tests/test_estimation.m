@@ -292,19 +292,29 @@ protocol=[b(:),Delta(:),30*ones(numel(b),1)];
 protocol(protocol(:,1)==0,3)=1;
 c=noise_config(["permeableStick","ecs","sphere"],protocol,"isotropic");
 c.delta=6; c.mode="free"; c.snr=50; c.nTissue=3; c.nRep=3; c.nTrain=30; c.degree=1;
-c.prior.tau=[5 30]; c.testPrior.De=[.5 1.5]; c.trainPrior=c.testPrior; c.trainPrior.tau=[5 30];
+c.prior.tau=[5 30]; c.prior.Dsoma=2; c.prior.p2=[.1 .5];
+c.testPrior=struct('De',[.5 1.5],'Dsoma',2,'p2',[.1 .5]);
+c.trainPrior=c.testPrior; c.trainPrior.tau=[5 30];
 [fits,M]=compare_sandix_exchange(c,[5 30],[10 20 1e6]);
 ref=fits.sandix_free; verifyEqual(t,height(M),72);
 for name=string(fieldnames(fits))'
     r=fits.(name); p=r.nlls.config.prior; model=TMImix([1 20 6],c.parts,ECS="isotropic");
     fixed=isscalar(p.tau);
-    verifyEqual(t,model.fitPlan(p).dimension,8-double(fixed));
+    verifyEqual(t,model.fitPlan(p).dimension,7-double(fixed));
     verifyEqual(t,r.forwardTruth,ref.forwardTruth);
     verifyEqual(t,r.nlls.observed,ref.nlls.observed);
     verifyEqual(t,r.polynomial.observed,r.nlls.observed);
     verifyGreaterThan(t,range([r.forwardTruth.tau]),0);
     verifyGreaterThan(t,range([r.forwardTruth.De]),0);
     verifyTrue(t,all([r.forwardTruth.tau]>=5 & [r.forwardTruth.tau]<=30));
+    verifyEqual(t,[r.forwardTruth.Dsoma],2*ones(1,9));
+    verifyTrue(t,all([r.forwardTruth.p2]>=.1 & [r.forwardTruth.p2]<=.5));
+    for method=["nlls","polynomial"]
+        verifyEqual(t,[r.(method).estimate.Dsoma],2*ones(1,9));
+        verifyTrue(t,all([r.(method).estimate.p2]>=.1 & [r.(method).estimate.p2]<=.5));
+    end
+    verifyEqual(t,[r.polynomial.trainingTruth.Dsoma],2*ones(1,c.nTrain));
+    verifyTrue(t,all([r.polynomial.trainingTruth.p2]>=.1 & [r.polynomial.trainingTruth.p2]<=.5));
     dw=r.nlls.protocol.b>0; verifyEqual(t,unique(r.nlls.protocol.Ndirs(dw)),30);
     verifyEqual(t,unique(r.nlls.protocol.L(dw)),6);
     startTruth=r.nlls.truth;
@@ -318,7 +328,8 @@ for name=string(fieldnames(fits))'
         table2array(struct2table(startTruth)),'AbsTol',1e-12);
 end
 verifyEqual(t,M.withinTissueSD(M.fixed),zeros(nnz(M.fixed),1));
-verifyEqual(t,M.rmseRatio(M.assumption=="sandix_free"),ones(18,1));
+verifyEqual(t,M.rmseRatio(M.assumption=="sandix_free" & ~M.fixed),ones(16,1));
+verifyTrue(t,all(isnan(M.rmseRatio(M.parameter=="Dsoma"))));
 verifyTrue(t,all(isnan(M.biasOverRepeatSD(M.fixed))));
 % Exact recovery exercises the finite-direction isotropic acquisition path.
 c.snr=Inf; c.nTissue=2; c.nRep=1; c.nTrain=15;

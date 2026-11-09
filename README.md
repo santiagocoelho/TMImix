@@ -63,20 +63,20 @@ The same 300 tissues and four noise draws are fitted by both NLLS and quadratic 
 
 | Fit | Exchange time | Independent free parameters |
 |---|---|---|
-| SANDIX-like | Estimated | 8 |
-| SANDIX-fixed | Fixed at 10 ms | 7 |
-| SANDI-like | Fixed at 1,000,000 ms | 7 |
+| SANDIX-like | Estimated | 7 |
+| SANDIX-fixed | Fixed at 10 ms | 6 |
+| SANDI-like | Fixed at 1,000,000 ms | 6 |
 
-The nine displayed parameters are three fractions (which sum to one), stick diffusivity, ECS diffusivity, sphere radius, intrasomal diffusivity, fODF p₂ and exchange time. All ground-truth parameters vary across tissues in every fit. Ground-truth τ is uniform from 5 to 30 ms. The default free-τ fit bounds and training distribution also span 5 to 30 ms. Edit `testTau`, `c.prior.tau`, and `c.trainPrior.tau` independently. The default ECS diffusivity is uniform from 0.5 to 1.5 µm²/ms. Other distribution settings are in `c.testPrior` and `c.trainPrior`.
+The nine displayed parameters are three fractions (which sum to one), stick diffusivity, ECS diffusivity, sphere radius, intrasomal diffusivity, fODF p₂ and exchange time. **Intrasomal diffusivity is fixed at 2 µm²/ms in the simulated tissues, polynomial training and every fit.** Every other ground-truth parameter varies across tissues. **fODF p₂ is uniform from 0.1 to 0.5**, with the same range used for training and fit bounds. The top-level `somaD` and `p2Range` settings control these choices. Ground-truth τ is uniform from 5 to 30 ms. The default free-τ fit bounds and training distribution also span 5 to 30 ms. Edit `testTau`, `c.prior.tau`, and `c.trainPrior.tau` independently. The default ECS diffusivity is uniform from 0.5 to 1.5 µm²/ms. Other distribution settings are in `c.testPrior` and `c.trainPrior`.
 
 Set **`fixedTau`** to the list of assumed values to compare. For example, `fixedTau = [5 10 15 20 25 30 1e6]` runs the free-τ baseline and each listed fixed-τ fit on identical noisy observations. Each fixed fit imposes its τ on the polynomial training population while the test population retains its varying τ. NLLS starts at each tissue's ground truth for all free parameters. It evaluates candidate S₀/S₂ through the same finite-direction projection as the simulated data, using the known simulated fibre axis. The fixed value 1e6 ms is evaluated by the finite-pulse exchange kernel and approximates impermeable sticks. τ follows TMImix's inverse-sum-of-rates convention described below.
 
-Results go to `results/sandix_exchange/snr_<SNR>/`. **`all_parameters.png`** contains all GT-versus-fit scatter panels, with one assumption per block row and NLLS and polynomial regression in its two columns. Each assumption subdirectory contains a 3×3 figure per estimator. The fixed-1e6-ms τ scatter uses separate x and y ranges to show both varying truths and the prescribed fitted value. **`bias_precision.png`**, **`rmse.png`**, and **`repeat_precision.png`** compare signed bias, total error and within-tissue noise SD across all repeats. Fixed outputs have zero repeat variance and can have large errors across tissues. The CSV includes `rmseRatio` and `precisionRatio`, each relative to that estimator's free-τ baseline. A ratio below one indicates a reduction. Flagged NLLS exits are included in the metrics and marked in red on the scatter plots.
+Results go to `results/sandix_exchange_fixed_soma/snr_<SNR>/`. **`all_parameters.png`** contains all GT-versus-fit scatter panels, with one assumption per block row and NLLS and polynomial regression in its two columns. Each assumption subdirectory contains a 3×3 figure per estimator. Fixed parameters are labeled in the panels. The fixed-1e6-ms τ scatter uses separate x and y ranges to show both varying truths and the prescribed fitted value. **`bias_precision.png`**, **`rmse.png`**, and **`repeat_precision.png`** compare signed bias, total error and within-tissue noise SD across all repeats. Fixed outputs have zero repeat variance and can have large errors across tissues. The CSV includes `rmseRatio` and `precisionRatio`, each relative to that estimator's free-τ baseline. A ratio below one indicates a reduction. Ratios with a zero baseline error or SD, including the fixed soma diffusivity, are reported as NaN. Flagged NLLS exits are included in the metrics and marked in red on the scatter plots.
 
 ```matlab
 % Redraw saved estimates from the repository root.
 addpath(pwd,'examples')
-outputDir = fullfile(pwd,'results','sandix_exchange','snr_50');
+outputDir = fullfile(pwd,'results','sandix_exchange_fixed_soma','snr_50');
 load(fullfile(outputDir,'comparison.mat'),'fits','metrics')
 tmixplots.plot_exchange_assumptions(fits,outputDir,1);
 tmixplots.plot_bias_precision(metrics,outputDir);

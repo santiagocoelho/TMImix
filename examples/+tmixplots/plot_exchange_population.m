@@ -110,7 +110,11 @@ for g = 1:numel(groups)
                         xlimits = [min(x)-pad,max(x)+pad];
                     end
                     handles = drawPanel(ax,x,y,flagged,limits(col,:),xlimits);
-                    if row==1, title(ax,titles{g}(col),'FontSize',11); end
+                    if row==1
+                        parameterTitle = titles{g}(col);
+                        if isscalar(spec.(name)), parameterTitle = parameterTitle+" · fixed"; end
+                        title(ax,parameterTitle,'FontSize',11);
+                    end
                     if col==1 && ~combined, ylabel(ax,sprintf('SNR %g',rows(row))); end
                     if row<numel(rows), ax.XTickLabel = []; end
                     if row==1 && col==1
