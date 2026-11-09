@@ -1,6 +1,6 @@
 # TMImix
 
-TMImix is a MATLAB extension of the [SMI signal model](https://github.com/NYU-DiffusionMRI/SMI). Choose the compartments in a fascicle, convolve their response with a sampled fibre orientation distribution (fODF), and fit the normalized rotational invariants **S₀ and S₂** across b-values and diffusion times. TMImix runs alongside SMI and does not require the SMI toolbox.
+TMImix is a MATLAB extension of the [SMI biophysical model](https://github.com/NYU-DiffusionMRI/SMI). Choose the compartments in a fascicle, convolve their response with a sampled fibre orientation distribution (fODF), and fit the normalized rotational invariants **S₀ and S₂** across b-values and diffusion times. TMImix runs alongside SMI and does not require the SMI toolbox.
 
 Start MATLAB in this directory and run `addpath(pwd,'examples')`. The forward model and regression use base MATLAB; NLLS uses `lsqnonlin` from Optimization Toolbox. Tested with MATLAB R2026a.
 
